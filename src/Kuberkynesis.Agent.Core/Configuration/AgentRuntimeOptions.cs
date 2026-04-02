@@ -43,7 +43,7 @@ public sealed class PairingOptions
 
     public int WebSocketTicketLifetimeSeconds { get; set; } = 60;
 
-    public int DisconnectReleaseGraceSeconds { get; set; } = 5;
+    public int DisconnectReleaseGraceSeconds { get; set; } = 30;
 }
 
 public sealed class PreviewReadOnlyLimitsOptions

@@ -1,5 +1,6 @@
 using k8s;
 using Kuberkynesis.Ui.Shared.Kubernetes;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -9,6 +10,7 @@ public sealed class KubeResourceQueryService
 {
     private const int DefaultLimit = 200;
     private const int MaxLimit = 500;
+    private const int DefaultMaxParallelContextQueryCount = 6;
     private static readonly IReadOnlyList<KubeResourceKind> AllSupportedKinds =
     [
         KubeResourceKind.Namespace,
@@ -55,38 +57,51 @@ public sealed class KubeResourceQueryService
 
         var targetContexts = ResolveTargetContexts(request.Contexts, loadResult).ToArray();
         var targetKinds = ResolveTargetKinds(request).ToArray();
-        var resources = new List<KubeResourceSummary>(normalizedLimit);
+        var resources = new ConcurrentBag<KubeResourceSummary>();
+        var contextWarnings = new ConcurrentQueue<KubeQueryWarning>();
 
-        foreach (var context in targetContexts)
-        {
-            if (context.Status is not KubeContextStatus.Configured)
+        await Parallel.ForEachAsync(
+            targetContexts,
+            new ParallelOptions
             {
-                warnings.Add(new KubeQueryWarning(context.Name, context.StatusMessage ?? "The kube context is not currently queryable."));
-                continue;
-            }
-
-            try
+                CancellationToken = cancellationToken,
+                MaxDegreeOfParallelism = Math.Min(DefaultMaxParallelContextQueryCount, Math.Max(1, targetContexts.Length))
+            },
+            async (context, probeCancellationToken) =>
             {
-                using var client = kubeConfigLoader.CreateClient(loadResult, context.Name);
-
-                foreach (var kind in targetKinds)
+                if (context.Status is not KubeContextStatus.Configured)
                 {
-                    var kindRequest = request with
-                    {
-                        Kind = kind,
-                        IncludeAllSupportedKinds = false,
-                        CustomResourceType = kind is KubeResourceKind.CustomResource ? request.CustomResourceType : null
-                    };
-                    var contextResources = await QueryContextAsync(client, context.Name, kindRequest, normalizedLimit, cancellationToken);
-
-                    resources.AddRange(contextResources.Where(summary => KubeResourceSummaryFactory.MatchesSearch(summary, request.Search)));
+                    contextWarnings.Enqueue(new KubeQueryWarning(context.Name, context.StatusMessage ?? "The kube context is not currently queryable."));
+                    return;
                 }
-            }
-            catch (Exception exception)
-            {
-                warnings.Add(new KubeQueryWarning(context.Name, exception.Message));
-            }
-        }
+
+                try
+                {
+                    using var client = kubeConfigLoader.CreateClient(loadResult, context.Name);
+
+                    foreach (var kind in targetKinds)
+                    {
+                        var kindRequest = request with
+                        {
+                            Kind = kind,
+                            IncludeAllSupportedKinds = false,
+                            CustomResourceType = kind is KubeResourceKind.CustomResource ? request.CustomResourceType : null
+                        };
+                        var contextResources = await QueryContextAsync(client, context.Name, kindRequest, normalizedLimit, probeCancellationToken);
+
+                        foreach (var resource in contextResources.Where(summary => KubeResourceSummaryFactory.MatchesSearch(summary, request.Search)))
+                        {
+                            resources.Add(resource);
+                        }
+                    }
+                }
+                catch (Exception exception)
+                {
+                    contextWarnings.Enqueue(new KubeQueryWarning(context.Name, exception.Message));
+                }
+            });
+
+        warnings.AddRange(contextWarnings);
 
         var orderedResources = resources
             .OrderBy(resource => resource.ContextName, StringComparer.OrdinalIgnoreCase)
