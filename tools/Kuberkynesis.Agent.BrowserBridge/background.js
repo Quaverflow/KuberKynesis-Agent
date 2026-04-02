@@ -1,6 +1,28 @@
 const defaultAgentBaseUrl = "http://127.0.0.1:46321/";
 const requestTimeoutMs = 30000;
 const webSocketConnections = new Map();
+const pageUrlPatterns = [
+  /^https:\/\/kuberkynesis\.com\/?/i,
+  /^https:\/\/www\.kuberkynesis\.com\/?/i,
+  /^https:\/\/kuberkynesis\.pages\.dev\/?/i,
+  /^http:\/\/localhost:5173\/?/i
+];
+
+chrome.runtime.onInstalled.addListener(() => {
+  void injectBridgeIntoOpenTabs();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  void injectBridgeIntoOpenTabs();
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== "loading" && changeInfo.status !== "complete") {
+    return;
+  }
+
+  void ensureContentScriptInjected(tabId, tab?.url);
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== "string") {
@@ -41,6 +63,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return false;
   }
 });
+
+async function injectBridgeIntoOpenTabs() {
+  const tabs = await chrome.tabs.query({});
+
+  await Promise.all(tabs.map(tab => ensureContentScriptInjected(tab.id, tab.url)));
+}
+
+async function ensureContentScriptInjected(tabId, tabUrl) {
+  if (typeof tabId !== "number" || !isSupportedPageUrl(tabUrl)) {
+    return;
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId, allFrames: false },
+      files: ["content.js"]
+    });
+  } catch {
+  }
+}
+
+function isSupportedPageUrl(tabUrl) {
+  if (typeof tabUrl !== "string" || tabUrl.length === 0) {
+    return false;
+  }
+
+  return pageUrlPatterns.some(pattern => pattern.test(tabUrl));
+}
 
 async function handleWebSocketConnectMessage(message, sender) {
   const connectionId = typeof message.connectionId === "string" ? message.connectionId.trim() : "";

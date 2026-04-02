@@ -8,6 +8,7 @@ This unpacked Chrome/Edge extension is a local-testing bridge for the hosted Kub
 2. Enable `Developer mode`.
 3. Click `Load unpacked`.
 4. Select this folder: `tools/Kuberkynesis.Agent.BrowserBridge`
+5. Open or reload `https://kuberkynesis.pages.dev` or `https://kuberkynesis.com`
 
 ## What it does today
 
@@ -16,6 +17,7 @@ This unpacked Chrome/Edge extension is a local-testing bridge for the hosted Kub
   - `https://www.kuberkynesis.com/*`
   - `https://kuberkynesis.pages.dev/*`
   - `http://localhost:5173/*`
+- uses explicit MV3 script injection from the service worker so the bridge can attach more reliably on managed browser profiles
 - allows fetch proxying only to:
   - `http://127.0.0.1/*`
   - `http://localhost/*`

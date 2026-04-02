@@ -1,4 +1,10 @@
 (function () {
+  if (window.__kuberkynesisAgentBridgeInstalled) {
+    return;
+  }
+
+  window.__kuberkynesisAgentBridgeInstalled = true;
+
   const pageProbeType = "kuberkynesis-agent-bridge-probe";
   const pageProbeResponseType = "kuberkynesis-agent-bridge-probe-response";
   const pageRequestType = "kuberkynesis-agent-bridge-request";

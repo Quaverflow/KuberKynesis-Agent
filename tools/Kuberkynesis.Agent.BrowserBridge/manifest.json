@@ -3,24 +3,18 @@
   "name": "Kuberkynesis Agent Bridge",
   "description": "Bridges kuberkynesis.com to a local Kuberkynesis agent for local testing.",
   "version": "0.1.0",
+  "permissions": [
+    "scripting",
+    "tabs"
+  ],
   "background": {
     "service_worker": "background.js"
   },
-  "content_scripts": [
-    {
-      "matches": [
-        "https://kuberkynesis.com/*",
-        "https://www.kuberkynesis.com/*",
-        "https://kuberkynesis.pages.dev/*",
-        "http://localhost:5173/*"
-      ],
-      "js": [
-        "content.js"
-      ],
-      "run_at": "document_start"
-    }
-  ],
   "host_permissions": [
+    "https://kuberkynesis.com/*",
+    "https://www.kuberkynesis.com/*",
+    "https://kuberkynesis.pages.dev/*",
+    "http://localhost:5173/*",
     "http://127.0.0.1/*",
     "http://localhost/*"
   ]
