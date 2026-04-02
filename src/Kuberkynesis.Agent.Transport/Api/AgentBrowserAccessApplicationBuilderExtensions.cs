@@ -17,7 +17,8 @@ public static class AgentBrowserAccessApplicationBuilderExtensions
                 return;
             }
 
-            var origin = context.Request.Headers.Origin.ToString();
+            var headerOrigin = context.Request.Headers.Origin.ToString();
+            var origin = AgentBridgeOriginResolver.ResolveEffectiveOrigin(context.Request);
 
             if (string.IsNullOrWhiteSpace(origin))
             {
@@ -50,7 +51,10 @@ public static class AgentBrowserAccessApplicationBuilderExtensions
                 return;
             }
 
-            ApplyCorsHeaders(context.Response.Headers, origin);
+            if (!string.IsNullOrWhiteSpace(headerOrigin))
+            {
+                ApplyCorsHeaders(context.Response.Headers, origin);
+            }
 
             if (HttpMethods.IsOptions(context.Request.Method))
             {

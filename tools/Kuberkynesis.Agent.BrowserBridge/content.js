@@ -46,7 +46,8 @@
       chrome.runtime.sendMessage(
         {
           type: "kuberkynesis-agent-bridge-fetch",
-          request: event.data.request
+          request: event.data.request,
+          pageOrigin: window.location.origin
         },
         (response) => {
           const runtimeError = chrome.runtime.lastError;
@@ -74,7 +75,8 @@
         {
           type: "kuberkynesis-agent-bridge-ws-connect",
           connectionId: event.data.connectionId,
-          url: event.data.url
+          url: event.data.url,
+          pageOrigin: window.location.origin
         },
         () => {
           const runtimeError = chrome.runtime.lastError;

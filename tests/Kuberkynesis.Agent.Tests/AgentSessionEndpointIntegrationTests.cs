@@ -74,6 +74,49 @@ public sealed class AgentSessionEndpointIntegrationTests
     }
 
     [Fact]
+    public async Task HelloAndPairEndpoints_GrantInteractiveSessionsThroughTheBrowserBridgeOrigin()
+    {
+        await using var host = await StartHostAsync();
+        const string pageOrigin = "https://kuberkynesis.pages.dev";
+        const string bridgeOrigin = "chrome-extension://bridge-test";
+
+        using var helloResponse = await SendAsyncWithRetry(host.Client, () =>
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, "/v1/hello");
+            request.Headers.Add("Origin", bridgeOrigin);
+            request.Headers.Add(AgentBridgeOriginResolver.ForwardedOriginHeaderName, pageOrigin);
+            return request;
+        });
+
+        Assert.Equal(HttpStatusCode.OK, helloResponse.StatusCode);
+        var hello = await helloResponse.Content.ReadFromJsonAsync<HelloResponse>(SerializerOptions);
+        Assert.NotNull(hello);
+
+        var pairRequest = new PairRequest
+        {
+            Nonce = hello!.Nonce,
+            AppVersion = "1.0.0",
+            PairingCode = ExtractPairingCode(host.App.Services),
+            Origin = pageOrigin,
+            RequestedMode = OriginAccessClass.Interactive
+        };
+
+        using var pairResponse = await SendAsyncWithRetry(host.Client, () =>
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, "/v1/pair");
+            request.Headers.Add("Origin", bridgeOrigin);
+            request.Headers.Add(AgentBridgeOriginResolver.ForwardedOriginHeaderName, pageOrigin);
+            request.Content = JsonContent.Create(pairRequest, options: SerializerOptions);
+            return request;
+        });
+
+        Assert.Equal(HttpStatusCode.OK, pairResponse.StatusCode);
+        var pairPayload = await pairResponse.Content.ReadFromJsonAsync<PairResponse>(SerializerOptions);
+        Assert.NotNull(pairPayload);
+        Assert.Equal(OriginAccessClass.Interactive, pairPayload!.GrantedMode);
+    }
+
+    [Fact]
     public async Task PairEndpoint_GrantsReadonlyPreviewSessionsForPreviewOrigins()
     {
         await using var host = await StartHostAsync();

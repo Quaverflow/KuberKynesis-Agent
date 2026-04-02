@@ -66,6 +66,28 @@ public sealed class AgentHttpMiddlewareTests
         Assert.Equal(sessionToken, session?.SessionToken);
     }
 
+    [Fact]
+    public async Task SessionValidationMiddleware_AllowsBrowserBridgeRequestsUsingTheForwardedOrigin()
+    {
+        var services = BuildServices();
+        var pipeline = BuildPipeline(services);
+        const string pageOrigin = "https://kuberkynesis.pages.dev";
+        var sessionToken = CreateInteractiveSessionToken(services, pageOrigin);
+        var context = CreateContext(
+            services,
+            HttpMethods.Get,
+            "/v1/contexts",
+            origin: "chrome-extension://bridge-test",
+            bearerToken: sessionToken);
+        context.Request.Headers[AgentBridgeOriginResolver.ForwardedOriginHeaderName] = pageOrigin;
+
+        await pipeline(context);
+
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        Assert.True(context.TryGetAuthenticatedAgentSession(out var session));
+        Assert.Equal(sessionToken, session?.SessionToken);
+    }
+
     private static ServiceProvider BuildServices()
     {
         var services = new ServiceCollection();
@@ -75,7 +97,7 @@ public sealed class AgentHttpMiddlewareTests
         {
             Origins = new OriginOptions
             {
-                Interactive = ["http://localhost:5173"],
+                Interactive = ["http://localhost:5173", "https://kuberkynesis.pages.dev"],
                 PreviewPattern = "^https://preview.example$"
             }
         };

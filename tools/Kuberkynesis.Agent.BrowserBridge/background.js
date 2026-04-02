@@ -95,6 +95,7 @@ function isSupportedPageUrl(tabUrl) {
 async function handleWebSocketConnectMessage(message, sender) {
   const connectionId = typeof message.connectionId === "string" ? message.connectionId.trim() : "";
   const url = typeof message.url === "string" ? message.url.trim() : "";
+  const pageOrigin = typeof message.pageOrigin === "string" ? message.pageOrigin.trim() : "";
 
   if (!connectionId) {
     throw new Error("The bridge websocket connection id is required.");
@@ -108,7 +109,7 @@ async function handleWebSocketConnectMessage(message, sender) {
     throw new Error("The bridge websocket connection requires a browser tab.");
   }
 
-  const targetUrl = normalizeWebSocketUrl(url);
+  const targetUrl = normalizeWebSocketUrl(url, pageOrigin);
   const socket = new WebSocket(targetUrl);
   const tabId = sender.tab.id;
 
@@ -180,7 +181,7 @@ function postWebSocketEvent(tabId, payload) {
   }).catch(() => {});
 }
 
-function normalizeWebSocketUrl(url) {
+function normalizeWebSocketUrl(url, pageOrigin) {
   const targetUrl = new URL(url);
 
   if (targetUrl.protocol !== "ws:" && targetUrl.protocol !== "wss:") {
@@ -191,11 +192,16 @@ function normalizeWebSocketUrl(url) {
     throw new Error("The bridge only supports localhost websocket endpoints.");
   }
 
+  if (pageOrigin) {
+    targetUrl.searchParams.set("bridgeOrigin", pageOrigin);
+  }
+
   return targetUrl.toString();
 }
 
 async function handleFetchMessage(message) {
   const request = message.request ?? {};
+  const pageOrigin = typeof message.pageOrigin === "string" ? message.pageOrigin.trim() : "";
   const methodValue = request.method ?? request.Method;
   const method = typeof methodValue === "string" ? methodValue.toUpperCase() : "GET";
   const requestUrlValue = request.url ?? request.Url;
@@ -207,6 +213,9 @@ async function handleFetchMessage(message) {
 
   const targetUrl = buildTargetUrl(requestUrl);
   const headers = sanitizeHeaders(request.headers ?? request.Headers);
+  if (pageOrigin) {
+    headers["X-Kuberkynesis-Bridge-Origin"] = pageOrigin;
+  }
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), requestTimeoutMs);
 

@@ -29,7 +29,7 @@ public static class AgentSessionEndpointRouteBuilderExtensions
 
         group.MapPost("/pair", (HttpContext httpContext, PairRequest request, PairingSessionRegistry sessions, OriginAccessClassifier classifier) =>
         {
-            var headerOrigin = httpContext.Request.Headers.Origin.ToString();
+            var headerOrigin = AgentBridgeOriginResolver.ResolveEffectiveOrigin(httpContext.Request);
 
             if (!string.IsNullOrWhiteSpace(headerOrigin) &&
                 !string.Equals(headerOrigin, request.Origin, StringComparison.OrdinalIgnoreCase))
@@ -75,7 +75,7 @@ public static class AgentSessionEndpointRouteBuilderExtensions
         {
             using var reader = new StreamReader(httpContext.Request.Body, Encoding.UTF8, leaveOpen: false);
             var sessionToken = (await reader.ReadToEndAsync(cancellationToken)).Trim();
-            var origin = httpContext.Request.Headers.Origin.ToString();
+            var origin = AgentBridgeOriginResolver.ResolveEffectiveOrigin(httpContext.Request);
 
             sessions.ScheduleSessionRelease(sessionToken, origin);
             return Results.NoContent();
@@ -400,7 +400,7 @@ public static class AgentSessionEndpointRouteBuilderExtensions
                 return;
             }
 
-            var origin = httpContext.Request.Headers.Origin.ToString();
+            var origin = AgentBridgeOriginResolver.ResolveEffectiveOrigin(httpContext.Request);
             var authorization = sessions.AuthorizeWebSocketTicket(wsTicket, origin);
 
             if (!authorization.Success)
@@ -608,7 +608,7 @@ public static class AgentSessionEndpointRouteBuilderExtensions
                 return;
             }
 
-            var origin = httpContext.Request.Headers.Origin.ToString();
+            var origin = AgentBridgeOriginResolver.ResolveEffectiveOrigin(httpContext.Request);
             var authorization = sessions.AuthorizeWebSocketTicket(wsTicket, origin);
 
             if (!authorization.Success)
@@ -917,7 +917,7 @@ public static class AgentSessionEndpointRouteBuilderExtensions
                 return;
             }
 
-            var origin = httpContext.Request.Headers.Origin.ToString();
+            var origin = AgentBridgeOriginResolver.ResolveEffectiveOrigin(httpContext.Request);
             var authorization = sessions.AuthorizeWebSocketTicket(wsTicket, origin);
 
             if (!authorization.Success)
@@ -1024,7 +1024,7 @@ public static class AgentSessionEndpointRouteBuilderExtensions
                 return;
             }
 
-            var origin = httpContext.Request.Headers.Origin.ToString();
+            var origin = AgentBridgeOriginResolver.ResolveEffectiveOrigin(httpContext.Request);
             var authorization = sessions.AuthorizeWebSocketTicket(wsTicket, origin);
 
             if (!authorization.Success)
@@ -1129,7 +1129,7 @@ public static class AgentSessionEndpointRouteBuilderExtensions
                 return;
             }
 
-            var origin = httpContext.Request.Headers.Origin.ToString();
+            var origin = AgentBridgeOriginResolver.ResolveEffectiveOrigin(httpContext.Request);
             var authorization = sessions.AuthorizeWebSocketTicket(wsTicket, origin);
 
             if (!authorization.Success)

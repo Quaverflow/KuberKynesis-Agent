@@ -19,7 +19,7 @@ public static class AgentSessionValidationApplicationBuilderExtensions
 
             var sessions = context.RequestServices.GetRequiredService<PairingSessionRegistry>();
             var sessionToken = AgentSessionValidationPolicy.TryGetBearerToken(context.Request.Headers.Authorization.ToString());
-            var origin = context.Request.Headers.Origin.ToString();
+            var origin = AgentBridgeOriginResolver.ResolveEffectiveOrigin(context.Request);
             var authorization = sessions.AuthorizeSession(sessionToken, origin);
 
             if (!authorization.Success || authorization.Session is null)
