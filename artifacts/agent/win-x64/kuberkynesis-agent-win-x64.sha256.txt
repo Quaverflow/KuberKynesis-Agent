@@ -1,1 +1,1 @@
-133ae34f6c3c9f049aac1dc2d8510433a4fa3ea5a23e960ccc78c4f1d4931605  kuberkynesis-agent-win-x64.zip
+4cf3419b912c4ca2af1e6e06ccdc73caf4081a72708bb409cb1f0f05fb0825f8  kuberkynesis-agent-win-x64.zip

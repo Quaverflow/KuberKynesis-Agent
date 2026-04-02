@@ -28,7 +28,8 @@ public sealed class AgentSessionEndpointIntegrationTests
 
     [Theory]
     [InlineData("http://localhost:5173")]
-    [InlineData("https://app.kuberkynesis.com")]
+    [InlineData("https://kuberkynesis.com")]
+    [InlineData("https://kuberkynesis.pages.dev")]
     public async Task HelloAndPairEndpoints_GrantInteractiveSessionsForInteractiveOrigins(string origin)
     {
         await using var host = await StartHostAsync();
@@ -43,9 +44,10 @@ public sealed class AgentSessionEndpointIntegrationTests
         Assert.Equal(HttpStatusCode.OK, helloResponse.StatusCode);
         var hello = await helloResponse.Content.ReadFromJsonAsync<HelloResponse>(SerializerOptions);
         Assert.NotNull(hello);
-        Assert.Equal("^https://[a-z0-9-]+\\.kuberkynesis-ui\\.pages\\.dev$", hello!.PreviewOriginPattern);
+        Assert.Equal("^https://[a-z0-9-]+\\.kuberkynesis\\.pages\\.dev$", hello!.PreviewOriginPattern);
         Assert.Contains("http://localhost:5173", hello.AllowedOrigins, StringComparer.OrdinalIgnoreCase);
-        Assert.Contains("https://app.kuberkynesis.com", hello.AllowedOrigins, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("https://kuberkynesis.com", hello.AllowedOrigins, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("https://kuberkynesis.pages.dev", hello.AllowedOrigins, StringComparer.OrdinalIgnoreCase);
 
         var pairRequest = new PairRequest
         {
@@ -75,7 +77,7 @@ public sealed class AgentSessionEndpointIntegrationTests
     public async Task PairEndpoint_GrantsReadonlyPreviewSessionsForPreviewOrigins()
     {
         await using var host = await StartHostAsync();
-        const string previewOrigin = "https://lab-preview.kuberkynesis-ui.pages.dev";
+        const string previewOrigin = "https://lab-preview.kuberkynesis.pages.dev";
 
         var pairPayload = await PairAsync(host, previewOrigin);
         Assert.Equal(OriginAccessClass.ReadonlyPreview, pairPayload.GrantedMode);
@@ -173,7 +175,7 @@ public sealed class AgentSessionEndpointIntegrationTests
     public async Task ExecuteEndpoint_RejectsReadonlyPreviewSessionsEvenWithCsrfHeaders()
     {
         await using var host = await StartHostAsync();
-        const string origin = "https://lab-preview.kuberkynesis-ui.pages.dev";
+        const string origin = "https://lab-preview.kuberkynesis.pages.dev";
 
         var pairPayload = await PairAsync(host, origin, OriginAccessClass.ReadonlyPreview);
 
@@ -422,7 +424,7 @@ public sealed class AgentSessionEndpointIntegrationTests
     public async Task ExecStartEndpoint_RejectsReadonlyPreviewSessionsEvenWithCsrfHeaders()
     {
         await using var host = await StartHostAsync(podExecRuntimeFactory: new FakePodExecRuntimeFactory());
-        const string origin = "https://lab-preview.kuberkynesis-ui.pages.dev";
+        const string origin = "https://lab-preview.kuberkynesis.pages.dev";
 
         var pairPayload = await PairAsync(host, origin, OriginAccessClass.ReadonlyPreview);
 
@@ -607,9 +609,11 @@ public sealed class AgentSessionEndpointIntegrationTests
                 Interactive =
                 [
                     "http://localhost:5173",
+                    "https://kuberkynesis.com",
+                    "https://kuberkynesis.pages.dev",
                     "https://app.kuberkynesis.com"
                 ],
-                PreviewPattern = "^https://[a-z0-9-]+\\.kuberkynesis-ui\\.pages\\.dev$"
+                PreviewPattern = "^https://[a-z0-9-]+\\.kuberkynesis\\.pages\\.dev$"
             }
         };
 

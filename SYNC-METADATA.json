@@ -1,8 +1,8 @@
 {
   "sourceRepository": "Quaverflow/KuberKynesis",
   "sourceBranch": "master",
-  "sourceCommit": "22858ee7029cbc6ffc0bd0e7bb8340d4576ee754",
-  "exportedAtUtc": "2026-04-02T04:03:16.1999551+00:00",
+  "sourceCommit": "fb7ea1989c061b74077d0d87ba7950a15f2e0804",
+  "exportedAtUtc": "2026-04-02T05:08:48.0769927+00:00",
   "publicRepository": "quaverflow/kuberkynesis-agent",
   "includedProjects": [
     "src/Kuberkynesis.Agent.Core",

@@ -43,18 +43,15 @@ public sealed class AgentUiLaunchService
                 return;
             }
 
-            if (IsLoopbackHttpUrl(uiUri))
-            {
-                var isReady = await EnsureLocalUiIsReadyAsync(uiUri);
+            var launchUiUri = await ResolveLaunchUiUriAsync(uiUri);
 
-                if (!isReady)
-                {
-                    return;
-                }
+            if (launchUiUri is null)
+            {
+                return;
             }
 
             var launchUrl = sessions.CreateUiLaunchUrl(
-                runtimeOptions.UiLaunch.Url,
+                launchUiUri.AbsoluteUri,
                 runtimeOptions.PublicUrl,
                 classifier,
                 runtimeOptions.UiLaunch.AutoConnectWithPairingCode);
@@ -71,22 +68,42 @@ public sealed class AgentUiLaunchService
         }
     }
 
-    private async Task<bool> EnsureLocalUiIsReadyAsync(Uri uiUri)
+    private async Task<Uri?> ResolveLaunchUiUriAsync(Uri configuredUiUri)
     {
+        if (!IsLoopbackHttpUrl(configuredUiUri))
+        {
+            return configuredUiUri;
+        }
+
         var timeout = TimeSpan.FromSeconds(Math.Clamp(runtimeOptions.UiLaunch.ReadyTimeoutSeconds, 1, 120));
         var deadline = DateTimeOffset.UtcNow.Add(timeout);
 
-        if (await WaitForHealthyAsync(uiUri, deadline))
+        if (await WaitForHealthyAsync(configuredUiUri, deadline))
         {
-            return true;
+            return configuredUiUri;
+        }
+
+        if (Uri.TryCreate(UiLaunchOptions.HostedProductionUrl, UriKind.Absolute, out var hostedFallbackUri) &&
+            !string.Equals(
+                configuredUiUri.GetLeftPart(UriPartial.Authority),
+                hostedFallbackUri.GetLeftPart(UriPartial.Authority),
+                StringComparison.OrdinalIgnoreCase) &&
+            classifier.Evaluate(hostedFallbackUri.GetLeftPart(UriPartial.Authority)).IsAllowed)
+        {
+            logger.LogInformation(
+                "The configured local UI URL '{UiUrl}' did not become healthy within {TimeoutSeconds} seconds. Falling back to hosted UI '{HostedUiUrl}'.",
+                configuredUiUri,
+                runtimeOptions.UiLaunch.ReadyTimeoutSeconds,
+                hostedFallbackUri);
+            return hostedFallbackUri;
         }
 
         logger.LogWarning(
             "The configured UI URL '{UiUrl}' did not become healthy within {TimeoutSeconds} seconds. The browser will not be opened.",
-            uiUri,
+            configuredUiUri,
             runtimeOptions.UiLaunch.ReadyTimeoutSeconds);
 
-        return false;
+        return null;
     }
 
     private static async Task<bool> IsUiHealthyAsync(Uri uiUri)

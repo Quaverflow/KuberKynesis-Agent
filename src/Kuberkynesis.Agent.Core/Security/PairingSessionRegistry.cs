@@ -306,13 +306,16 @@ public sealed class PairingSessionRegistry : IDisposable
         lock (gate)
         {
             var launchUrl = string.IsNullOrWhiteSpace(runtimeOptions.UiLaunch.Url)
-                ? "https://app.kuberkynesis.com"
+                ? UiLaunchOptions.HostedProductionUrl.TrimEnd('/')
                 : runtimeOptions.UiLaunch.Url;
+            var launchFallbackNotice = ShouldMentionHostedFallback(launchUrl)
+                ? $"{Environment.NewLine}If the local UI is not running, reopen {UiLaunchOptions.HostedProductionUrl} and enter this pairing code there."
+                : string.Empty;
 
             return $"""
 Kuberkynesis agent running on {runtimeOptions.PublicUrl}
 Pairing code: {pairingCode}
-Open {launchUrl} to connect
+Open {launchUrl} to connect{launchFallbackNotice}
 Interactive sessions: 1
 Read-only preview sessions: unlimited
 """;
@@ -520,6 +523,16 @@ Read-only preview sessions: unlimited
     private static string CreateToken(string prefix, int bytes)
     {
         return $"{prefix}{Convert.ToHexString(RandomNumberGenerator.GetBytes(bytes)).ToLowerInvariant()}";
+    }
+
+    private static bool ShouldMentionHostedFallback(string launchUrl)
+    {
+        return Uri.TryCreate(launchUrl, UriKind.Absolute, out var launchUri) &&
+               launchUri.IsLoopback &&
+               !string.Equals(
+                   launchUri.GetLeftPart(UriPartial.Authority).TrimEnd('/') + "/",
+                   UiLaunchOptions.HostedProductionUrl,
+                   StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed record ActiveSession(

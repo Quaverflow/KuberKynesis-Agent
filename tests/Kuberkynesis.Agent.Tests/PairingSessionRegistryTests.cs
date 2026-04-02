@@ -17,7 +17,7 @@ public sealed class PairingSessionRegistryTests
         {
             Origins = new OriginOptions
             {
-                Interactive = ["https://app.kuberkynesis.com"]
+                Interactive = ["https://kuberkynesis.com"]
             }
         };
         var classifier = new OriginAccessClassifier(options);
@@ -32,16 +32,16 @@ public sealed class PairingSessionRegistryTests
                 Nonce = hello.Nonce,
                 AppVersion = "0.1.0",
                 PairingCode = pairingCode,
-                Origin = "https://app.kuberkynesis.com",
+                Origin = "https://kuberkynesis.com",
                 RequestedMode = OriginAccessClass.Interactive
             },
-            "https://app.kuberkynesis.com",
-            classifier.Evaluate("https://app.kuberkynesis.com"));
+            "https://kuberkynesis.com",
+            classifier.Evaluate("https://kuberkynesis.com"));
 
         Assert.True(pairResult.Success);
         Assert.NotNull(pairResult.Response);
 
-        var authorized = registry.AuthorizeSession(pairResult.Response!.SessionToken, "https://app.kuberkynesis.com");
+        var authorized = registry.AuthorizeSession(pairResult.Response!.SessionToken, "https://kuberkynesis.com");
         var rejected = registry.AuthorizeSession(pairResult.Response.SessionToken, "https://evil.example");
 
         Assert.True(authorized.Success);
@@ -87,11 +87,11 @@ public sealed class PairingSessionRegistryTests
             Origins = new OriginOptions
             {
                 Interactive = ["http://localhost:5173"],
-                PreviewPattern = "^https://[a-z0-9-]+\\.kuberkynesis-ui\\.pages\\.dev$"
+                PreviewPattern = "^https://[a-z0-9-]+\\.kuberkynesis\\.pages\\.dev$"
             }
         };
 
-        const string previewOrigin = "https://lab-preview.kuberkynesis-ui.pages.dev";
+        const string previewOrigin = "https://lab-preview.kuberkynesis.pages.dev";
         var classifier = new OriginAccessClassifier(options);
         var registry = new PairingSessionRegistry(options);
         var hello = registry.CreateHelloResponse(classifier);

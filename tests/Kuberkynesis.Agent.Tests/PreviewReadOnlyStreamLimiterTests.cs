@@ -105,7 +105,7 @@ public sealed class PreviewReadOnlyStreamLimiterTests
             token,
             "csrf_test",
             accessClass,
-            "https://preview.kuberkynesis-ui.pages.dev",
+            "https://preview.kuberkynesis.pages.dev",
             "1.0.0",
             DateTimeOffset.UtcNow.AddHours(1));
     }

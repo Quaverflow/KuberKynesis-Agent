@@ -75,7 +75,7 @@ public sealed class PrometheusMetricsOptions
 
 public sealed class UiLaunchOptions
 {
-    public const string HostedProductionUrl = "https://app.kuberkynesis.com/";
+    public const string HostedProductionUrl = "https://kuberkynesis.com/";
     public const string LocalDevelopmentUrl = "http://localhost:5173/";
 
     public bool AutoOpenBrowser { get; set; } = true;

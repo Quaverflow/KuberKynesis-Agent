@@ -3,6 +3,7 @@ namespace Kuberkynesis.Agent.Core.Configuration;
 public sealed record AgentStartupCliOverrides(
     int? Port,
     IReadOnlyList<string> AdditionalOrigins,
+    string? UiUrl,
     string? KubeConfigPath,
     bool DisableBrowserOpen,
     bool EnableDiagnostics)
@@ -13,6 +14,7 @@ public sealed record AgentStartupCliOverrides(
 
         int? port = null;
         var origins = new List<string>();
+        string? uiUrl = null;
         string? kubeConfigPath = null;
         var disableBrowserOpen = false;
         var enableDiagnostics = false;
@@ -48,6 +50,18 @@ public sealed record AgentStartupCliOverrides(
                 continue;
             }
 
+            if (TryReadValue(current, "--ui-url", args, ref index, out var uiUrlValue))
+            {
+                if (string.IsNullOrWhiteSpace(uiUrlValue) ||
+                    !Uri.TryCreate(uiUrlValue.Trim(), UriKind.Absolute, out _))
+                {
+                    throw new ArgumentException("The --ui-url flag requires a valid absolute URL.", nameof(args));
+                }
+
+                uiUrl = uiUrlValue.Trim();
+                continue;
+            }
+
             if (TryReadValue(current, "--kubeconfig", args, ref index, out var kubeConfigValue))
             {
                 if (string.IsNullOrWhiteSpace(kubeConfigValue))
@@ -72,7 +86,7 @@ public sealed record AgentStartupCliOverrides(
             }
 
             throw new ArgumentException(
-                $"The startup argument '{current}' is not supported. Use 'start' followed by supported flags such as --port, --origin, --kubeconfig, --no-browser-open, or --diagnostics.",
+                $"The startup argument '{current}' is not supported. Use 'start' followed by supported flags such as --port, --origin, --ui-url, --kubeconfig, --no-browser-open, or --diagnostics.",
                 nameof(args));
         }
 
@@ -81,6 +95,7 @@ public sealed record AgentStartupCliOverrides(
             AdditionalOrigins: origins
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
+            UiUrl: uiUrl,
             KubeConfigPath: kubeConfigPath,
             DisableBrowserOpen: disableBrowserOpen,
             EnableDiagnostics: enableDiagnostics);
@@ -101,6 +116,11 @@ public sealed record AgentStartupCliOverrides(
             {
                 options.Origins.Interactive.Add(origin);
             }
+        }
+
+        if (!string.IsNullOrWhiteSpace(UiUrl))
+        {
+            options.UiLaunch.Url = UiUrl;
         }
 
         if (DisableBrowserOpen)

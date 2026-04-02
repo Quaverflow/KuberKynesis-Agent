@@ -34,5 +34,5 @@ Packaged archives and checksum files are published under `artifacts/agent/<rid>/
 ## Sync metadata
 
 - Source repository: Quaverflow/KuberKynesis
-- Source commit: 22858ee7029cbc6ffc0bd0e7bb8340d4576ee754
+- Source commit: fb7ea1989c061b74077d0d87ba7950a15f2e0804
 - Full sync manifest: `SYNC-METADATA.json`

@@ -12,6 +12,7 @@ public sealed class AgentStartupCliOverridesTests
             "--port", "47321",
             "--origin", "http://localhost:4173",
             "--origin=http://localhost:4173",
+            "--ui-url", "https://kuberkynesis.com/",
             "--no-browser-open"
         ]);
 
@@ -37,6 +38,7 @@ public sealed class AgentStartupCliOverridesTests
             "http://localhost:4173"
         ],
         options.Origins.Interactive);
+        Assert.Equal("https://kuberkynesis.com/", options.UiLaunch.Url);
         Assert.False(options.UiLaunch.AutoOpenBrowser);
     }
 

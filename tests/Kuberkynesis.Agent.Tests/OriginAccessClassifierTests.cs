@@ -12,11 +12,12 @@ public sealed class OriginAccessClassifierTests
         {
             Interactive =
             [
-                "https://app.kuberkynesis.com",
+                "https://kuberkynesis.com",
+                "https://kuberkynesis.pages.dev",
                 "http://localhost:5173",
                 "https://localhost:5173"
             ],
-            PreviewPattern = "^https://[a-z0-9-]+\\.kuberkynesis-ui\\.pages\\.dev$"
+            PreviewPattern = "^https://[a-z0-9-]+\\.kuberkynesis\\.pages\\.dev$"
         }
     };
 
@@ -25,7 +26,7 @@ public sealed class OriginAccessClassifierTests
     {
         var classifier = new OriginAccessClassifier(Options);
 
-        var decision = classifier.Evaluate("https://app.kuberkynesis.com");
+        var decision = classifier.Evaluate("https://kuberkynesis.com");
 
         Assert.Equal(OriginAccessDecision.Allow(OriginAccessClass.Interactive), decision);
     }
@@ -35,7 +36,7 @@ public sealed class OriginAccessClassifierTests
     {
         var classifier = new OriginAccessClassifier(Options);
 
-        var decision = classifier.Evaluate("https://feature-123.kuberkynesis-ui.pages.dev");
+        var decision = classifier.Evaluate("https://feature-123.kuberkynesis.pages.dev");
 
         Assert.Equal(OriginAccessDecision.Allow(OriginAccessClass.ReadonlyPreview), decision);
     }
