@@ -1,6 +1,8 @@
 using k8s;
+using k8s.Autorest;
 using k8s.Models;
 using Kuberkynesis.Ui.Shared.Kubernetes;
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -134,10 +136,16 @@ public sealed class KubeResourceDetailService
         CancellationToken cancellationToken)
     {
         var resource = await client.ReadNodeAsync(name, cancellationToken: cancellationToken);
-        var relatedPods = await ListPodsForNodeAsync(client, contextName, name, cancellationToken);
+        var relatedPodsResult = await TryLoadOptionalRelatedResourcesAsync(
+            contextName,
+            $"scheduled pods for node '{name}'",
+            () => ListPodsForNodeAsync(client, contextName, name, cancellationToken));
 
         return WithTransparency(
-            KubeResourceDetailFactory.Create(contextName, resource, relatedPods),
+            KubeResourceDetailFactory.Create(contextName, resource, relatedPodsResult.RelatedResources) with
+            {
+                Warnings = relatedPodsResult.Warnings
+            },
             new KubeResourceDetailRequest
             {
                 ContextName = contextName,
@@ -154,19 +162,28 @@ public sealed class KubeResourceDetailService
         CancellationToken cancellationToken)
     {
         var resource = await client.ReadNamespacedPodAsync(name, namespaceName, cancellationToken: cancellationToken);
-        var selectedServices = await ListServicesSelectingPodAsync(client, contextName, namespaceName, resource, cancellationToken);
-        var relatedIngresses = await ListIngressesReferencingServicesAsync(
-            client,
+        var selectedServicesResult = await TryLoadOptionalRelatedResourcesAsync(
             contextName,
-            namespaceName,
-            selectedServices.Select(static service => service.Name),
-            cancellationToken);
+            $"service relationships for pod '{name}'",
+            () => ListServicesSelectingPodAsync(client, contextName, namespaceName, resource, cancellationToken));
+        var relatedIngressesResult = await TryLoadOptionalRelatedResourcesAsync(
+            contextName,
+            $"ingress relationships for pod '{name}'",
+            () => ListIngressesReferencingServicesAsync(
+                client,
+                contextName,
+                namespaceName,
+                selectedServicesResult.RelatedResources.Select(static service => service.Name),
+                cancellationToken));
 
         return WithTransparency(
             KubeResourceDetailFactory.Create(
                 contextName,
                 resource,
-                selectedServices.Concat(relatedIngresses).ToArray()),
+                selectedServicesResult.RelatedResources.Concat(relatedIngressesResult.RelatedResources).ToArray()) with
+            {
+                Warnings = selectedServicesResult.Warnings.Concat(relatedIngressesResult.Warnings).ToArray()
+            },
             new KubeResourceDetailRequest
             {
                 ContextName = contextName,
@@ -184,10 +201,16 @@ public sealed class KubeResourceDetailService
         CancellationToken cancellationToken)
     {
         var resource = await client.ReadNamespacedDeploymentAsync(name, namespaceName, cancellationToken: cancellationToken);
-        var relatedPods = await ListPodsBySelectorAsync(client, contextName, namespaceName, resource.Spec?.Selector?.MatchLabels, cancellationToken);
+        var relatedPodsResult = await TryLoadOptionalRelatedResourcesAsync(
+            contextName,
+            $"selected pods for deployment '{name}'",
+            () => ListPodsBySelectorAsync(client, contextName, namespaceName, resource.Spec?.Selector?.MatchLabels, cancellationToken));
 
         return WithTransparency(
-            KubeResourceDetailFactory.Create(contextName, resource, relatedPods),
+            KubeResourceDetailFactory.Create(contextName, resource, relatedPodsResult.RelatedResources) with
+            {
+                Warnings = relatedPodsResult.Warnings
+            },
             new KubeResourceDetailRequest
             {
                 ContextName = contextName,
@@ -205,10 +228,16 @@ public sealed class KubeResourceDetailService
         CancellationToken cancellationToken)
     {
         var resource = await client.ReadNamespacedReplicaSetAsync(name, namespaceName, cancellationToken: cancellationToken);
-        var relatedPods = await ListPodsBySelectorAsync(client, contextName, namespaceName, resource.Spec?.Selector?.MatchLabels, cancellationToken);
+        var relatedPodsResult = await TryLoadOptionalRelatedResourcesAsync(
+            contextName,
+            $"selected pods for ReplicaSet '{name}'",
+            () => ListPodsBySelectorAsync(client, contextName, namespaceName, resource.Spec?.Selector?.MatchLabels, cancellationToken));
 
         return WithTransparency(
-            KubeResourceDetailFactory.Create(contextName, resource, relatedPods),
+            KubeResourceDetailFactory.Create(contextName, resource, relatedPodsResult.RelatedResources) with
+            {
+                Warnings = relatedPodsResult.Warnings
+            },
             new KubeResourceDetailRequest
             {
                 ContextName = contextName,
@@ -226,10 +255,16 @@ public sealed class KubeResourceDetailService
         CancellationToken cancellationToken)
     {
         var resource = await client.ReadNamespacedStatefulSetAsync(name, namespaceName, cancellationToken: cancellationToken);
-        var relatedPods = await ListPodsBySelectorAsync(client, contextName, namespaceName, resource.Spec?.Selector?.MatchLabels, cancellationToken);
+        var relatedPodsResult = await TryLoadOptionalRelatedResourcesAsync(
+            contextName,
+            $"selected pods for StatefulSet '{name}'",
+            () => ListPodsBySelectorAsync(client, contextName, namespaceName, resource.Spec?.Selector?.MatchLabels, cancellationToken));
 
         return WithTransparency(
-            KubeResourceDetailFactory.Create(contextName, resource, relatedPods),
+            KubeResourceDetailFactory.Create(contextName, resource, relatedPodsResult.RelatedResources) with
+            {
+                Warnings = relatedPodsResult.Warnings
+            },
             new KubeResourceDetailRequest
             {
                 ContextName = contextName,
@@ -247,10 +282,16 @@ public sealed class KubeResourceDetailService
         CancellationToken cancellationToken)
     {
         var resource = await client.ReadNamespacedDaemonSetAsync(name, namespaceName, cancellationToken: cancellationToken);
-        var relatedPods = await ListPodsBySelectorAsync(client, contextName, namespaceName, resource.Spec?.Selector?.MatchLabels, cancellationToken);
+        var relatedPodsResult = await TryLoadOptionalRelatedResourcesAsync(
+            contextName,
+            $"selected pods for DaemonSet '{name}'",
+            () => ListPodsBySelectorAsync(client, contextName, namespaceName, resource.Spec?.Selector?.MatchLabels, cancellationToken));
 
         return WithTransparency(
-            KubeResourceDetailFactory.Create(contextName, resource, relatedPods),
+            KubeResourceDetailFactory.Create(contextName, resource, relatedPodsResult.RelatedResources) with
+            {
+                Warnings = relatedPodsResult.Warnings
+            },
             new KubeResourceDetailRequest
             {
                 ContextName = contextName,
@@ -268,10 +309,16 @@ public sealed class KubeResourceDetailService
         CancellationToken cancellationToken)
     {
         var resource = await client.ReadNamespacedServiceAsync(name, namespaceName, cancellationToken: cancellationToken);
-        var relatedPods = await ListPodsBySelectorAsync(client, contextName, namespaceName, resource.Spec?.Selector, cancellationToken);
+        var relatedPodsResult = await TryLoadOptionalRelatedResourcesAsync(
+            contextName,
+            $"selected pods for service '{name}'",
+            () => ListPodsBySelectorAsync(client, contextName, namespaceName, resource.Spec?.Selector, cancellationToken));
 
         return WithTransparency(
-            KubeResourceDetailFactory.Create(contextName, resource, relatedPods),
+            KubeResourceDetailFactory.Create(contextName, resource, relatedPodsResult.RelatedResources) with
+            {
+                Warnings = relatedPodsResult.Warnings
+            },
             new KubeResourceDetailRequest
             {
                 ContextName = contextName,
@@ -289,10 +336,16 @@ public sealed class KubeResourceDetailService
         CancellationToken cancellationToken)
     {
         var resource = await client.ReadNamespacedIngressAsync(name, namespaceName, cancellationToken: cancellationToken);
-        var relatedServices = await ListIngressBackendServicesAsync(client, contextName, namespaceName, resource, cancellationToken);
+        var relatedServicesResult = await TryLoadOptionalRelatedResourcesAsync(
+            contextName,
+            $"backend services for ingress '{name}'",
+            () => ListIngressBackendServicesAsync(client, contextName, namespaceName, resource, cancellationToken));
 
         return WithTransparency(
-            KubeResourceDetailFactory.Create(contextName, resource, relatedServices),
+            KubeResourceDetailFactory.Create(contextName, resource, relatedServicesResult.RelatedResources) with
+            {
+                Warnings = relatedServicesResult.Warnings
+            },
             new KubeResourceDetailRequest
             {
                 ContextName = contextName,
@@ -348,15 +401,21 @@ public sealed class KubeResourceDetailService
         CancellationToken cancellationToken)
     {
         var resource = await client.ReadNamespacedJobAsync(name, namespaceName, cancellationToken: cancellationToken);
-        var relatedPods = await ListPodsBySelectorAsync(
-            client,
+        var relatedPodsResult = await TryLoadOptionalRelatedResourcesAsync(
             contextName,
-            namespaceName,
-            new Dictionary<string, string>(StringComparer.Ordinal) { ["job-name"] = name },
-            cancellationToken);
+            $"pods for Job '{name}'",
+            () => ListPodsBySelectorAsync(
+                client,
+                contextName,
+                namespaceName,
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["job-name"] = name },
+                cancellationToken));
 
         return WithTransparency(
-            KubeResourceDetailFactory.Create(contextName, resource, relatedPods),
+            KubeResourceDetailFactory.Create(contextName, resource, relatedPodsResult.RelatedResources) with
+            {
+                Warnings = relatedPodsResult.Warnings
+            },
             new KubeResourceDetailRequest
             {
                 ContextName = contextName,
@@ -374,17 +433,26 @@ public sealed class KubeResourceDetailService
         CancellationToken cancellationToken)
     {
         var resource = await client.ReadNamespacedCronJobAsync(name, namespaceName, cancellationToken: cancellationToken);
-        var jobs = await client.ListNamespacedJobAsync(namespaceName, cancellationToken: cancellationToken);
-        var relatedJobs = jobs.Items
-            .Where(job => job.Metadata?.OwnerReferences?.Any(owner =>
-                string.Equals(owner.Kind, "CronJob", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(owner.Name, name, StringComparison.Ordinal)) is true)
-            .Take(RelatedResourceLimit)
-            .Select(job => ToRelatedResource("Spawned job", KubeResourceSummaryFactory.Create(contextName, job)))
-            .ToArray();
+        var relatedJobsResult = await TryLoadOptionalRelatedResourcesAsync(
+            contextName,
+            $"spawned jobs for CronJob '{name}'",
+            async () =>
+            {
+                var jobs = await client.ListNamespacedJobAsync(namespaceName, cancellationToken: cancellationToken);
+                return jobs.Items
+                    .Where(job => job.Metadata?.OwnerReferences?.Any(owner =>
+                        string.Equals(owner.Kind, "CronJob", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(owner.Name, name, StringComparison.Ordinal)) is true)
+                    .Take(RelatedResourceLimit)
+                    .Select(job => ToRelatedResource("Spawned job", KubeResourceSummaryFactory.Create(contextName, job)))
+                    .ToArray();
+            });
 
         return WithTransparency(
-            KubeResourceDetailFactory.Create(contextName, resource, relatedJobs),
+            KubeResourceDetailFactory.Create(contextName, resource, relatedJobsResult.RelatedResources) with
+            {
+                Warnings = relatedJobsResult.Warnings
+            },
             new KubeResourceDetailRequest
             {
                 ContextName = contextName,
@@ -614,6 +682,37 @@ public sealed class KubeResourceDetailService
             Summary: summary.Summary);
     }
 
+    internal static async Task<OptionalRelatedResourcesResult> TryLoadOptionalRelatedResourcesAsync(
+        string contextName,
+        string scopeSummary,
+        Func<Task<IReadOnlyList<KubeRelatedResource>>> query)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(contextName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(scopeSummary);
+        ArgumentNullException.ThrowIfNull(query);
+
+        try
+        {
+            return new OptionalRelatedResourcesResult(await query(), []);
+        }
+        catch (HttpOperationException exception) when (exception.Response.StatusCode is HttpStatusCode.Forbidden)
+        {
+            return new OptionalRelatedResourcesResult(
+                [],
+                [new KubeQueryWarning(
+                    contextName,
+                    $"Skipped {scopeSummary} because the current Kubernetes identity is not allowed to read that related resource set. {exception.Message}")]);
+        }
+        catch (HttpOperationException exception) when (exception.Response.StatusCode is HttpStatusCode.NotFound)
+        {
+            return new OptionalRelatedResourcesResult(
+                [],
+                [new KubeQueryWarning(
+                    contextName,
+                    $"Skipped {scopeSummary} because the related resources changed before inspection completed. {exception.Message}")]);
+        }
+    }
+
     private static KubeResourceDetailResponse WithTransparency(
         KubeResourceDetailResponse response,
         KubeResourceDetailRequest request)
@@ -624,3 +723,7 @@ public sealed class KubeResourceDetailService
         };
     }
 }
+
+internal sealed record OptionalRelatedResourcesResult(
+    IReadOnlyList<KubeRelatedResource> RelatedResources,
+    IReadOnlyList<KubeQueryWarning> Warnings);
