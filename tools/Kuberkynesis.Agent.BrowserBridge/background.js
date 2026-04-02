@@ -196,15 +196,17 @@ function normalizeWebSocketUrl(url) {
 
 async function handleFetchMessage(message) {
   const request = message.request ?? {};
-  const method = typeof request.method === "string" ? request.method.toUpperCase() : "GET";
-  const requestUrl = typeof request.url === "string" ? request.url.trim() : "";
+  const methodValue = request.method ?? request.Method;
+  const method = typeof methodValue === "string" ? methodValue.toUpperCase() : "GET";
+  const requestUrlValue = request.url ?? request.Url;
+  const requestUrl = typeof requestUrlValue === "string" ? requestUrlValue.trim() : "";
 
   if (!requestUrl) {
     throw new Error("The bridge request url is required.");
   }
 
   const targetUrl = buildTargetUrl(requestUrl);
-  const headers = sanitizeHeaders(request.headers);
+  const headers = sanitizeHeaders(request.headers ?? request.Headers);
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), requestTimeoutMs);
 
@@ -212,7 +214,7 @@ async function handleFetchMessage(message) {
     const response = await fetch(targetUrl, {
       method,
       headers,
-      body: method === "GET" || method === "HEAD" ? undefined : request.body ?? undefined,
+      body: method === "GET" || method === "HEAD" ? undefined : (request.body ?? request.Body ?? undefined),
       signal: controller.signal
     });
 
