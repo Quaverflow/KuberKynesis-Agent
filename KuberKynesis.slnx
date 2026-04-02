@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Kuberkynesis.Agent.Core/Kuberkynesis.Agent.Core.csproj" />
+    <Project Path="src/Kuberkynesis.Agent.Kube/Kuberkynesis.Agent.Kube.csproj" />
+    <Project Path="src/Kuberkynesis.Agent.Transport/Kuberkynesis.Agent.Transport.csproj" />
+    <Project Path="src/Kuberkynesis.Agent/Kuberkynesis.Agent.csproj" />
+    <Project Path="src/Kuberkynesis.LiveSurface.AspNetCore/Kuberkynesis.LiveSurface.AspNetCore.csproj" />
+    <Project Path="src/Kuberkynesis.LiveSurface/Kuberkynesis.LiveSurface.csproj" />
+    <Project Path="src/Kuberkynesis.Ui.Shared/Kuberkynesis.Ui.Shared.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Kuberkynesis.Agent.Integration/Kuberkynesis.Agent.Integration.csproj" />
+    <Project Path="tests/Kuberkynesis.Agent.Tests/Kuberkynesis.Agent.Tests.csproj" />
+  </Folder>
+</Solution>

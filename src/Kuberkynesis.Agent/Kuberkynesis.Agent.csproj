@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Kuberkynesis.Agent.Core\Kuberkynesis.Agent.Core.csproj" />
+    <ProjectReference Include="..\Kuberkynesis.Agent.Kube\Kuberkynesis.Agent.Kube.csproj" />
+    <ProjectReference Include="..\Kuberkynesis.Agent.Transport\Kuberkynesis.Agent.Transport.csproj" />
+    <ProjectReference Include="..\Kuberkynesis.LiveSurface.AspNetCore\Kuberkynesis.LiveSurface.AspNetCore.csproj" />
+    <ProjectReference Include="..\Kuberkynesis.Ui.Shared\Kuberkynesis.Ui.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

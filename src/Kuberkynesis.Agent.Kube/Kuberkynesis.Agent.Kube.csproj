@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="KubernetesClient" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Kuberkynesis.Agent.Core\Kuberkynesis.Agent.Core.csproj" />
+    <ProjectReference Include="..\Kuberkynesis.LiveSurface\Kuberkynesis.LiveSurface.csproj" />
+    <ProjectReference Include="..\Kuberkynesis.Ui.Shared\Kuberkynesis.Ui.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

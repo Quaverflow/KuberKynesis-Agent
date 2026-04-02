@@ -1,0 +1,18 @@
+{
+  "sourceRepository": "Quaverflow/KuberKynesis",
+  "sourceBranch": "master",
+  "sourceCommit": "2a485d7f065f51b7463e98445806b117237cebc5",
+  "exportedAtUtc": "2026-04-02T03:49:40.6776691+00:00",
+  "publicRepository": "quaverflow/kuberkynesis-agent",
+  "includedProjects": [
+    "src/Kuberkynesis.Agent.Core",
+    "src/Kuberkynesis.Agent.Kube",
+    "src/Kuberkynesis.Agent.Transport",
+    "src/Kuberkynesis.Agent",
+    "src/Kuberkynesis.LiveSurface",
+    "src/Kuberkynesis.LiveSurface.AspNetCore",
+    "src/Kuberkynesis.Ui.Shared",
+    "tests/Kuberkynesis.Agent.Integration",
+    "tests/Kuberkynesis.Agent.Tests"
+  ]
+}
