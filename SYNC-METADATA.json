@@ -1,10 +1,11 @@
 {
   "sourceRepository": "Quaverflow/KuberKynesis",
   "sourceBranch": "master",
-  "sourceCommit": "fb7ea1989c061b74077d0d87ba7950a15f2e0804",
-  "exportedAtUtc": "2026-04-02T05:08:48.0769927+00:00",
+  "sourceCommit": "e79a51d80eb72357944a9854e8e5de9e6d16d0ec",
+  "exportedAtUtc": "2026-04-02T06:30:27.3595026+00:00",
   "publicRepository": "quaverflow/kuberkynesis-agent",
   "includedProjects": [
+    "tools/Kuberkynesis.Agent.BrowserBridge",
     "src/Kuberkynesis.Agent.Core",
     "src/Kuberkynesis.Agent.Kube",
     "src/Kuberkynesis.Agent.Transport",

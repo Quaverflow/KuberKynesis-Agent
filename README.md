@@ -11,6 +11,7 @@ This public repo is a filtered export of the private Kuberkynesis monorepo. It i
 - `src/Kuberkynesis.LiveSurface`
 - `src/Kuberkynesis.LiveSurface.AspNetCore`
 - `src/Kuberkynesis.Ui.Shared`
+- `tools/Kuberkynesis.Agent.BrowserBridge`
 - `tests/Kuberkynesis.Agent.Tests`
 - `tests/Kuberkynesis.Agent.Integration`
 
@@ -31,8 +32,12 @@ dotnet test .\tests\Kuberkynesis.Agent.Integration\Kuberkynesis.Agent.Integratio
 
 Packaged archives and checksum files are published under `artifacts/agent/<rid>/`.
 
+## Local browser extension bridge
+
+For local hosted-UI bridge testing, load the unpacked extension under `tools/Kuberkynesis.Agent.BrowserBridge` from `chrome://extensions` or `edge://extensions`.
+
 ## Sync metadata
 
 - Source repository: Quaverflow/KuberKynesis
-- Source commit: fb7ea1989c061b74077d0d87ba7950a15f2e0804
+- Source commit: e79a51d80eb72357944a9854e8e5de9e6d16d0ec
 - Full sync manifest: `SYNC-METADATA.json`
