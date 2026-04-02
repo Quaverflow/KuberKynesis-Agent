@@ -11,6 +11,7 @@ public sealed class KubeResourceQueryService
     private const int DefaultLimit = 200;
     private const int MaxLimit = 500;
     private const int DefaultMaxParallelContextQueryCount = 6;
+    private static readonly TimeSpan NamespaceQueryCacheDuration = TimeSpan.FromSeconds(20);
     private static readonly IReadOnlyList<KubeResourceKind> AllSupportedKinds =
     [
         KubeResourceKind.Namespace,
@@ -30,6 +31,7 @@ public sealed class KubeResourceQueryService
     ];
 
     private readonly IKubeConfigLoader kubeConfigLoader;
+    private readonly ConcurrentDictionary<string, CachedContextResourceQuery> namespaceQueryCache = new(StringComparer.Ordinal);
 
     public KubeResourceQueryService(IKubeConfigLoader kubeConfigLoader)
     {
@@ -180,7 +182,7 @@ public sealed class KubeResourceQueryService
         return Math.Min(requestedLimit, MaxLimit);
     }
 
-    private static Task<IReadOnlyList<KubeResourceSummary>> QueryContextAsync(
+    private Task<IReadOnlyList<KubeResourceSummary>> QueryContextAsync(
         Kubernetes client,
         string contextName,
         KubeResourceQueryRequest request,
@@ -190,7 +192,7 @@ public sealed class KubeResourceQueryService
         return request.Kind switch
         {
             KubeResourceKind.CustomResource => QueryCustomResourcesAsync(client, contextName, request, limit, cancellationToken),
-            KubeResourceKind.Namespace => QueryNamespacesAsync(client, contextName, limit, cancellationToken),
+            KubeResourceKind.Namespace => QueryCachedNamespacesAsync(client, contextName, limit, cancellationToken),
             KubeResourceKind.Node => QueryNodesAsync(client, contextName, limit, cancellationToken),
             KubeResourceKind.Pod => QueryPodsAsync(client, contextName, request.Namespace, limit, cancellationToken),
             KubeResourceKind.Deployment => QueryDeploymentsAsync(client, contextName, request.Namespace, limit, cancellationToken),
@@ -206,6 +208,58 @@ public sealed class KubeResourceQueryService
             KubeResourceKind.Event => QueryEventsAsync(client, contextName, request.Namespace, limit, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(request.Kind), request.Kind, "Unsupported Kubernetes resource kind.")
         };
+    }
+
+    private Task<IReadOnlyList<KubeResourceSummary>> QueryCachedNamespacesAsync(
+        Kubernetes client,
+        string contextName,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var cacheKey = $"{contextName}|{limit}";
+        return QueryCachedContextResourcesAsync(
+            namespaceQueryCache,
+            cacheKey,
+            () => QueryNamespacesAsync(client, contextName, limit, cancellationToken),
+            NamespaceQueryCacheDuration,
+            cancellationToken);
+    }
+
+    private static async Task<IReadOnlyList<KubeResourceSummary>> QueryCachedContextResourcesAsync(
+        ConcurrentDictionary<string, CachedContextResourceQuery> cache,
+        string cacheKey,
+        Func<Task<IReadOnlyList<KubeResourceSummary>>> loader,
+        TimeSpan cacheDuration,
+        CancellationToken cancellationToken)
+    {
+        var entry = cache.GetOrAdd(cacheKey, static _ => new CachedContextResourceQuery());
+        var now = DateTimeOffset.UtcNow;
+
+        if (entry.Resources is not null && entry.ExpiresAtUtc > now)
+        {
+            return entry.Resources;
+        }
+
+        await entry.Gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            now = DateTimeOffset.UtcNow;
+
+            if (entry.Resources is not null && entry.ExpiresAtUtc > now)
+            {
+                return entry.Resources;
+            }
+
+            var resources = await loader();
+            entry.Resources = resources;
+            entry.ExpiresAtUtc = now.Add(cacheDuration);
+            return resources;
+        }
+        finally
+        {
+            entry.Gate.Release();
+        }
     }
 
     private static async Task<IReadOnlyList<KubeResourceSummary>> QueryCustomResourcesAsync(
@@ -266,6 +320,15 @@ public sealed class KubeResourceQueryService
     {
         var list = await client.ListNamespaceAsync(limit: limit, cancellationToken: cancellationToken);
         return list.Items.Select(item => KubeResourceSummaryFactory.Create(contextName, item)).ToArray();
+    }
+
+    private sealed class CachedContextResourceQuery
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+
+        public DateTimeOffset ExpiresAtUtc { get; set; } = DateTimeOffset.MinValue;
+
+        public IReadOnlyList<KubeResourceSummary>? Resources { get; set; }
     }
 
     private static async Task<IReadOnlyList<KubeResourceSummary>> QueryNodesAsync(
