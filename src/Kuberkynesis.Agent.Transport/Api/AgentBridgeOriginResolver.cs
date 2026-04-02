@@ -11,10 +11,11 @@ public static class AgentBridgeOriginResolver
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var headerOrigin = request.Headers.Origin.ToString();
+        var headerOrigin = NormalizeOriginValue(request.Headers.Origin.ToString());
         var forwardedOrigin = request.Headers[ForwardedOriginHeaderName].ToString();
 
-        if (IsTrustedBridgeOrigin(headerOrigin) && !string.IsNullOrWhiteSpace(forwardedOrigin))
+        if ((IsTrustedBridgeOrigin(headerOrigin) || string.IsNullOrWhiteSpace(headerOrigin)) &&
+            !string.IsNullOrWhiteSpace(forwardedOrigin))
         {
             return forwardedOrigin.Trim();
         }
@@ -28,6 +29,18 @@ public static class AgentBridgeOriginResolver
         return string.IsNullOrWhiteSpace(queryOrigin)
             ? null
             : queryOrigin.Trim();
+    }
+
+    private static string? NormalizeOriginValue(string? origin)
+    {
+        if (string.IsNullOrWhiteSpace(origin))
+        {
+            return null;
+        }
+
+        return string.Equals(origin.Trim(), "null", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : origin.Trim();
     }
 
     private static bool IsTrustedBridgeOrigin(string? origin)
