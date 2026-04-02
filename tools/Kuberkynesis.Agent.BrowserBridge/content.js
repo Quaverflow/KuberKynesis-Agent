@@ -17,7 +17,7 @@
   const bridgeSource = "kuberkynesis-agent-bridge";
 
   window.addEventListener("message", (event) => {
-    if (event.source !== window || !event.data || event.data.source !== pageSource || event.data.type !== pageRequestType) {
+    if (event.source !== window || !event.data || event.data.source !== pageSource) {
       return;
     }
 
