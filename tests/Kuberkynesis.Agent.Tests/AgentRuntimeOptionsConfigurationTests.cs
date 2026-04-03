@@ -18,6 +18,7 @@ public sealed class AgentRuntimeOptionsConfigurationTests
         Assert.NotNull(options);
         Assert.Equal(UiLaunchOptions.HostedProductionUrl, options!.UiLaunch.Url);
         Assert.True(options.UiLaunch.AutoOpenBrowser);
+        Assert.Equal(4, options.ResourceQueries.ContextTimeoutSeconds);
     }
 
     [Fact]

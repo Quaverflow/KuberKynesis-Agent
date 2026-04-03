@@ -17,6 +17,8 @@ public sealed class AgentRuntimeOptions
 
     public PreviewReadOnlyLimitsOptions PreviewReadOnlyLimits { get; set; } = new();
 
+    public ResourceQueryOptions ResourceQueries { get; set; } = new();
+
     public MetricsOptions Metrics { get; set; } = new();
 
     public UiLaunchOptions UiLaunch { get; set; } = new();
@@ -53,6 +55,11 @@ public sealed class PreviewReadOnlyLimitsOptions
     public int MaxWatchCountPerSession { get; set; } = 12;
 
     public int MaxLogStreamsPerSession { get; set; } = 4;
+}
+
+public sealed class ResourceQueryOptions
+{
+    public int ContextTimeoutSeconds { get; set; } = 4;
 }
 
 public sealed class MetricsOptions

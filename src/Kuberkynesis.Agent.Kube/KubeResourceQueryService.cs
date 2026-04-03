@@ -1,4 +1,5 @@
 using k8s;
+using Kuberkynesis.Agent.Core.Configuration;
 using Kuberkynesis.Ui.Shared.Kubernetes;
 using System.Collections.Concurrent;
 using System.Text.Json;
@@ -11,6 +12,7 @@ public sealed class KubeResourceQueryService
     private const int DefaultLimit = 200;
     private const int MaxLimit = 500;
     private const int DefaultMaxParallelContextQueryCount = 6;
+    private const int DefaultContextQueryTimeoutSeconds = 4;
     private static readonly TimeSpan NamespaceQueryCacheDuration = TimeSpan.FromSeconds(20);
     private static readonly IReadOnlyList<KubeResourceKind> AllSupportedKinds =
     [
@@ -31,11 +33,16 @@ public sealed class KubeResourceQueryService
     ];
 
     private readonly IKubeConfigLoader kubeConfigLoader;
+    private readonly TimeSpan contextQueryTimeout;
     private readonly ConcurrentDictionary<string, CachedContextResourceQuery> namespaceQueryCache = new(StringComparer.Ordinal);
 
-    public KubeResourceQueryService(IKubeConfigLoader kubeConfigLoader)
+    public KubeResourceQueryService(IKubeConfigLoader kubeConfigLoader, AgentRuntimeOptions runtimeOptions)
     {
         this.kubeConfigLoader = kubeConfigLoader;
+        contextQueryTimeout = TimeSpan.FromSeconds(
+            Math.Max(1, runtimeOptions.ResourceQueries.ContextTimeoutSeconds <= 0
+                ? DefaultContextQueryTimeoutSeconds
+                : runtimeOptions.ResourceQueries.ContextTimeoutSeconds));
     }
 
     public async Task<KubeResourceQueryResponse> QueryAsync(KubeResourceQueryRequest request, CancellationToken cancellationToken)
@@ -80,6 +87,8 @@ public sealed class KubeResourceQueryService
                 try
                 {
                     using var client = kubeConfigLoader.CreateClient(loadResult, context.Name);
+                    using var contextQueryCancellation = CancellationTokenSource.CreateLinkedTokenSource(probeCancellationToken);
+                    contextQueryCancellation.CancelAfter(contextQueryTimeout);
 
                     foreach (var kind in targetKinds)
                     {
@@ -89,13 +98,24 @@ public sealed class KubeResourceQueryService
                             IncludeAllSupportedKinds = false,
                             CustomResourceType = kind is KubeResourceKind.CustomResource ? request.CustomResourceType : null
                         };
-                        var contextResources = await QueryContextAsync(client, context.Name, kindRequest, normalizedLimit, probeCancellationToken);
+                        var contextResources = await QueryContextAsync(
+                            client,
+                            context.Name,
+                            kindRequest,
+                            normalizedLimit,
+                            contextQueryCancellation.Token);
 
                         foreach (var resource in contextResources.Where(summary => KubeResourceSummaryFactory.MatchesSearch(summary, request.Search)))
                         {
                             resources.Add(resource);
                         }
                     }
+                }
+                catch (OperationCanceledException) when (!probeCancellationToken.IsCancellationRequested)
+                {
+                    contextWarnings.Enqueue(new KubeQueryWarning(
+                        context.Name,
+                        $"Timed out after {(int)contextQueryTimeout.TotalSeconds}s while querying {request.Kind}."));
                 }
                 catch (Exception exception)
                 {
