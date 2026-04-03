@@ -1,1 +1,1 @@
-65082a27247fa8511e0d30b9727a7dfc643191ac03e3951fb5330e68c14821a2  kuberkynesis-agent-linux-x64.zip
+e06c5a7e1703a54109d43d0e9c93c46192d08b6356ffd75b0e073d7841f48ec9  kuberkynesis-agent-linux-x64.zip

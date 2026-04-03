@@ -1,8 +1,10 @@
 using k8s;
+using k8s.Models;
 using Kuberkynesis.Agent.Core.Configuration;
 using Kuberkynesis.Ui.Shared.Kubernetes;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -14,6 +16,7 @@ public sealed class KubeResourceQueryService : IDisposable
     private const int MaxLimit = 500;
     private const int DefaultMaxParallelContextQueryCount = 6;
     private const int DefaultContextQueryTimeoutSeconds = 4;
+    private static readonly TimeSpan KubectlFastPathTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan ClientCacheSignatureTtl = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan NamespaceQueryCacheDuration = TimeSpan.FromSeconds(20);
     private static readonly IReadOnlyList<KubeResourceKind> AllSupportedKinds =
@@ -96,6 +99,7 @@ public sealed class KubeResourceQueryService : IDisposable
             },
             async (context, probeCancellationToken) =>
             {
+                var transportKinds = new HashSet<string>(StringComparer.Ordinal);
                 var clientAcquireMilliseconds = 0;
                 var queryMilliseconds = 0;
                 var filterMilliseconds = 0;
@@ -108,6 +112,7 @@ public sealed class KubeResourceQueryService : IDisposable
                     contextWarnings.Enqueue(new KubeQueryWarning(context.Name, error));
                     contextTimings.Add(new KubeResourceContextQueryTiming(
                         ContextName: context.Name,
+                        TransportKind: "unavailable",
                         ClientAcquireMilliseconds: clientAcquireMilliseconds,
                         QueryMilliseconds: queryMilliseconds,
                         FilterMilliseconds: filterMilliseconds,
@@ -142,8 +147,9 @@ public sealed class KubeResourceQueryService : IDisposable
                             kindRequest,
                             normalizedLimit,
                             contextQueryCancellation.Token);
-                        returnedResourceCount += contextResources.Count;
-                        contextResourceBuffer.AddRange(contextResources);
+                        returnedResourceCount += contextResources.Resources.Count;
+                        contextResourceBuffer.AddRange(contextResources.Resources);
+                        transportKinds.Add(contextResources.TransportKind);
                     }
                     queryStopwatch.Stop();
                     queryMilliseconds = ToMilliseconds(queryStopwatch.Elapsed);
@@ -159,6 +165,7 @@ public sealed class KubeResourceQueryService : IDisposable
 
                     contextTimings.Add(new KubeResourceContextQueryTiming(
                         ContextName: context.Name,
+                        TransportKind: ResolveTransportKind(transportKinds),
                         ClientAcquireMilliseconds: clientAcquireMilliseconds,
                         QueryMilliseconds: queryMilliseconds,
                         FilterMilliseconds: filterMilliseconds,
@@ -171,6 +178,7 @@ public sealed class KubeResourceQueryService : IDisposable
                     contextWarnings.Enqueue(new KubeQueryWarning(context.Name, error));
                     contextTimings.Add(new KubeResourceContextQueryTiming(
                         ContextName: context.Name,
+                        TransportKind: ResolveTransportKind(transportKinds),
                         ClientAcquireMilliseconds: clientAcquireMilliseconds,
                         QueryMilliseconds: queryMilliseconds,
                         FilterMilliseconds: filterMilliseconds,
@@ -184,6 +192,7 @@ public sealed class KubeResourceQueryService : IDisposable
                     contextWarnings.Enqueue(new KubeQueryWarning(context.Name, exception.Message));
                     contextTimings.Add(new KubeResourceContextQueryTiming(
                         ContextName: context.Name,
+                        TransportKind: ResolveTransportKind(transportKinds),
                         ClientAcquireMilliseconds: clientAcquireMilliseconds,
                         QueryMilliseconds: queryMilliseconds,
                         FilterMilliseconds: filterMilliseconds,
@@ -290,7 +299,7 @@ public sealed class KubeResourceQueryService : IDisposable
         return Math.Min(requestedLimit, MaxLimit);
     }
 
-    private Task<IReadOnlyList<KubeResourceSummary>> QueryContextAsync(
+    private Task<ContextQueryExecutionResult> QueryContextAsync(
         Kubernetes client,
         string contextName,
         KubeResourceQueryRequest request,
@@ -299,38 +308,46 @@ public sealed class KubeResourceQueryService : IDisposable
     {
         return request.Kind switch
         {
-            KubeResourceKind.CustomResource => QueryCustomResourcesAsync(client, contextName, request, limit, cancellationToken),
+            KubeResourceKind.CustomResource => WrapQueryResultAsync(QueryCustomResourcesAsync(client, contextName, request, limit, cancellationToken)),
             KubeResourceKind.Namespace => QueryCachedNamespacesAsync(client, contextName, limit, cancellationToken),
-            KubeResourceKind.Node => QueryNodesAsync(client, contextName, limit, cancellationToken),
+            KubeResourceKind.Node => WrapQueryResultAsync(QueryNodesAsync(client, contextName, limit, cancellationToken)),
             KubeResourceKind.Pod => QueryPodsAsync(client, contextName, request.Namespace, limit, cancellationToken),
-            KubeResourceKind.Deployment => QueryDeploymentsAsync(client, contextName, request.Namespace, limit, cancellationToken),
-            KubeResourceKind.ReplicaSet => QueryReplicaSetsAsync(client, contextName, request.Namespace, limit, cancellationToken),
-            KubeResourceKind.StatefulSet => QueryStatefulSetsAsync(client, contextName, request.Namespace, limit, cancellationToken),
-            KubeResourceKind.DaemonSet => QueryDaemonSetsAsync(client, contextName, request.Namespace, limit, cancellationToken),
-            KubeResourceKind.Service => QueryServicesAsync(client, contextName, request.Namespace, limit, cancellationToken),
-            KubeResourceKind.Ingress => QueryIngressesAsync(client, contextName, request.Namespace, limit, cancellationToken),
-            KubeResourceKind.ConfigMap => QueryConfigMapsAsync(client, contextName, request.Namespace, limit, cancellationToken),
-            KubeResourceKind.Secret => QuerySecretsAsync(client, contextName, request.Namespace, limit, cancellationToken),
-            KubeResourceKind.Job => QueryJobsAsync(client, contextName, request.Namespace, limit, cancellationToken),
-            KubeResourceKind.CronJob => QueryCronJobsAsync(client, contextName, request.Namespace, limit, cancellationToken),
-            KubeResourceKind.Event => QueryEventsAsync(client, contextName, request.Namespace, limit, cancellationToken),
+            KubeResourceKind.Deployment => WrapQueryResultAsync(QueryDeploymentsAsync(client, contextName, request.Namespace, limit, cancellationToken)),
+            KubeResourceKind.ReplicaSet => WrapQueryResultAsync(QueryReplicaSetsAsync(client, contextName, request.Namespace, limit, cancellationToken)),
+            KubeResourceKind.StatefulSet => WrapQueryResultAsync(QueryStatefulSetsAsync(client, contextName, request.Namespace, limit, cancellationToken)),
+            KubeResourceKind.DaemonSet => WrapQueryResultAsync(QueryDaemonSetsAsync(client, contextName, request.Namespace, limit, cancellationToken)),
+            KubeResourceKind.Service => WrapQueryResultAsync(QueryServicesAsync(client, contextName, request.Namespace, limit, cancellationToken)),
+            KubeResourceKind.Ingress => WrapQueryResultAsync(QueryIngressesAsync(client, contextName, request.Namespace, limit, cancellationToken)),
+            KubeResourceKind.ConfigMap => WrapQueryResultAsync(QueryConfigMapsAsync(client, contextName, request.Namespace, limit, cancellationToken)),
+            KubeResourceKind.Secret => WrapQueryResultAsync(QuerySecretsAsync(client, contextName, request.Namespace, limit, cancellationToken)),
+            KubeResourceKind.Job => WrapQueryResultAsync(QueryJobsAsync(client, contextName, request.Namespace, limit, cancellationToken)),
+            KubeResourceKind.CronJob => WrapQueryResultAsync(QueryCronJobsAsync(client, contextName, request.Namespace, limit, cancellationToken)),
+            KubeResourceKind.Event => WrapQueryResultAsync(QueryEventsAsync(client, contextName, request.Namespace, limit, cancellationToken)),
             _ => throw new ArgumentOutOfRangeException(nameof(request.Kind), request.Kind, "Unsupported Kubernetes resource kind.")
         };
     }
 
-    private Task<IReadOnlyList<KubeResourceSummary>> QueryCachedNamespacesAsync(
+    private async Task<ContextQueryExecutionResult> QueryCachedNamespacesAsync(
         Kubernetes client,
         string contextName,
         int limit,
         CancellationToken cancellationToken)
     {
+        var kubectlResources = await TryQueryNamespacesViaKubectlAsync(contextName, limit, cancellationToken);
+
+        if (kubectlResources is not null)
+        {
+            return new ContextQueryExecutionResult(kubectlResources, "kubectl");
+        }
+
         var cacheKey = $"{contextName}|{limit}";
-        return QueryCachedContextResourcesAsync(
+        var resources = await QueryCachedContextResourcesAsync(
             namespaceQueryCache,
             cacheKey,
             () => QueryNamespacesAsync(client, contextName, limit, cancellationToken),
             NamespaceQueryCacheDuration,
             cancellationToken);
+        return new ContextQueryExecutionResult(resources, "typed-client");
     }
 
     private static async Task<IReadOnlyList<KubeResourceSummary>> QueryCachedContextResourcesAsync(
@@ -367,6 +384,132 @@ public sealed class KubeResourceQueryService : IDisposable
         finally
         {
             entry.Gate.Release();
+        }
+    }
+
+    private static async Task<ContextQueryExecutionResult> WrapQueryResultAsync(Task<IReadOnlyList<KubeResourceSummary>> queryTask)
+    {
+        return new ContextQueryExecutionResult(await queryTask, "typed-client");
+    }
+
+    private static async Task<IReadOnlyList<KubeResourceSummary>?> TryQueryNamespacesViaKubectlAsync(
+        string contextName,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var list = await TryRunKubectlListAsync<V1NamespaceList>(
+            contextName,
+            namespaceName: null,
+            resourceName: "namespaces",
+            cancellationToken);
+
+        return list?.Items
+            .Select(item => KubeResourceSummaryFactory.Create(contextName, item))
+            .Take(limit)
+            .ToArray();
+    }
+
+    private static async Task<IReadOnlyList<KubeResourceSummary>?> TryQueryPodsViaKubectlAsync(
+        string contextName,
+        string? namespaceName,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var list = await TryRunKubectlListAsync<V1PodList>(
+            contextName,
+            namespaceName,
+            resourceName: "pods",
+            cancellationToken);
+
+        return list?.Items
+            .Select(item => KubeResourceSummaryFactory.Create(contextName, item))
+            .Take(limit)
+            .ToArray();
+    }
+
+    private static async Task<TList?> TryRunKubectlListAsync<TList>(
+        string contextName,
+        string? namespaceName,
+        string resourceName,
+        CancellationToken cancellationToken)
+        where TList : class
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "kubectl",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            }
+        };
+
+        process.StartInfo.ArgumentList.Add("--context");
+        process.StartInfo.ArgumentList.Add(contextName);
+
+        if (string.IsNullOrWhiteSpace(namespaceName))
+        {
+            if (string.Equals(resourceName, "pods", StringComparison.Ordinal))
+            {
+                process.StartInfo.ArgumentList.Add("-A");
+            }
+        }
+        else
+        {
+            process.StartInfo.ArgumentList.Add("-n");
+            process.StartInfo.ArgumentList.Add(namespaceName.Trim());
+        }
+
+        process.StartInfo.ArgumentList.Add("get");
+        process.StartInfo.ArgumentList.Add(resourceName);
+        process.StartInfo.ArgumentList.Add("-o");
+        process.StartInfo.ArgumentList.Add("json");
+        process.StartInfo.ArgumentList.Add("--request-timeout=15s");
+
+        try
+        {
+            process.Start();
+        }
+        catch
+        {
+            return null;
+        }
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+
+        using var timeoutCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCancellation.CancelAfter(KubectlFastPathTimeout);
+
+        try
+        {
+            await process.WaitForExitAsync(timeoutCancellation.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            TryTerminate(process);
+            return null;
+        }
+
+        var stdout = await stdoutTask;
+        _ = await stderrTask;
+
+        if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(stdout))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<TList>(stdout);
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -518,18 +661,27 @@ public sealed class KubeResourceQueryService : IDisposable
         return list.Items.Select(item => KubeResourceSummaryFactory.Create(contextName, item)).ToArray();
     }
 
-    private static async Task<IReadOnlyList<KubeResourceSummary>> QueryPodsAsync(
+    private static async Task<ContextQueryExecutionResult> QueryPodsAsync(
         Kubernetes client,
         string contextName,
         string? namespaceName,
         int limit,
         CancellationToken cancellationToken)
     {
+        var kubectlResources = await TryQueryPodsViaKubectlAsync(contextName, namespaceName, limit, cancellationToken);
+
+        if (kubectlResources is not null)
+        {
+            return new ContextQueryExecutionResult(kubectlResources, "kubectl");
+        }
+
         var list = string.IsNullOrWhiteSpace(namespaceName)
             ? await client.ListPodForAllNamespacesAsync(limit: limit, cancellationToken: cancellationToken)
             : await client.ListNamespacedPodAsync(namespaceName, limit: limit, cancellationToken: cancellationToken);
 
-        return list.Items.Select(item => KubeResourceSummaryFactory.Create(contextName, item)).ToArray();
+        return new ContextQueryExecutionResult(
+            list.Items.Select(item => KubeResourceSummaryFactory.Create(contextName, item)).ToArray(),
+            "typed-client");
     }
 
     private static async Task<IReadOnlyList<KubeResourceSummary>> QueryDeploymentsAsync(
@@ -693,6 +845,35 @@ public sealed class KubeResourceQueryService : IDisposable
 
         return list.Items.Select(item => KubeResourceSummaryFactory.Create(contextName, item)).ToArray();
     }
+
+    private static string ResolveTransportKind(IReadOnlyCollection<string> transportKinds)
+    {
+        return transportKinds.Count switch
+        {
+            0 => "typed-client",
+            1 => transportKinds.First(),
+            _ => "mixed"
+        };
+    }
+
+    private static void TryTerminate(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch
+        {
+            // Ignore best-effort cleanup failures.
+        }
+    }
+
+    private sealed record ContextQueryExecutionResult(
+        IReadOnlyList<KubeResourceSummary> Resources,
+        string TransportKind);
 
     public void Dispose()
     {

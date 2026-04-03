@@ -2,6 +2,7 @@ namespace Kuberkynesis.Ui.Shared.Kubernetes;
 
 public sealed record KubeResourceContextQueryTiming(
     string ContextName,
+    string TransportKind,
     int ClientAcquireMilliseconds,
     int QueryMilliseconds,
     int FilterMilliseconds,
