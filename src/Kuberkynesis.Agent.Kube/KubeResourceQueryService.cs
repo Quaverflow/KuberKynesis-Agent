@@ -7,12 +7,13 @@ using System.Text.Json.Nodes;
 
 namespace Kuberkynesis.Agent.Kube;
 
-public sealed class KubeResourceQueryService
+public sealed class KubeResourceQueryService : IDisposable
 {
     private const int DefaultLimit = 200;
     private const int MaxLimit = 500;
     private const int DefaultMaxParallelContextQueryCount = 6;
     private const int DefaultContextQueryTimeoutSeconds = 4;
+    private static readonly TimeSpan ClientCacheSignatureTtl = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan NamespaceQueryCacheDuration = TimeSpan.FromSeconds(20);
     private static readonly IReadOnlyList<KubeResourceKind> AllSupportedKinds =
     [
@@ -34,6 +35,7 @@ public sealed class KubeResourceQueryService
 
     private readonly IKubeConfigLoader kubeConfigLoader;
     private readonly TimeSpan contextQueryTimeout;
+    private readonly ConcurrentDictionary<string, CachedKubernetesClient> clientCache = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, CachedContextResourceQuery> namespaceQueryCache = new(StringComparer.Ordinal);
 
     public KubeResourceQueryService(IKubeConfigLoader kubeConfigLoader, AgentRuntimeOptions runtimeOptions)
@@ -86,7 +88,7 @@ public sealed class KubeResourceQueryService
 
                 try
                 {
-                    using var client = kubeConfigLoader.CreateClient(loadResult, context.Name);
+                    var client = await GetOrCreateCachedClientAsync(loadResult, context.Name, probeCancellationToken);
                     using var contextQueryCancellation = CancellationTokenSource.CreateLinkedTokenSource(probeCancellationToken);
                     contextQueryCancellation.CancelAfter(contextQueryTimeout);
 
@@ -282,6 +284,66 @@ public sealed class KubeResourceQueryService
         }
     }
 
+    private async Task<Kubernetes> GetOrCreateCachedClientAsync(
+        KubeConfigLoadResult loadResult,
+        string contextName,
+        CancellationToken cancellationToken)
+    {
+        var cacheKey = CreateClientCacheKey(loadResult, contextName);
+        var entry = clientCache.GetOrAdd(cacheKey, static _ => new CachedKubernetesClient());
+
+        await entry.Gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            entry.LastAccessedUtc = DateTimeOffset.UtcNow;
+            entry.Client ??= kubeConfigLoader.CreateClient(loadResult, contextName);
+            return entry.Client;
+        }
+        finally
+        {
+            entry.Gate.Release();
+            TrimStaleClientCache(cacheKey);
+        }
+    }
+
+    private void TrimStaleClientCache(string activeCacheKey)
+    {
+        var cutoff = DateTimeOffset.UtcNow.Subtract(ClientCacheSignatureTtl);
+
+        foreach (var pair in clientCache)
+        {
+            if (string.Equals(pair.Key, activeCacheKey, StringComparison.Ordinal) ||
+                pair.Value.LastAccessedUtc >= cutoff)
+            {
+                continue;
+            }
+
+            if (!clientCache.TryRemove(pair.Key, out var removedEntry))
+            {
+                continue;
+            }
+
+            removedEntry.Client?.Dispose();
+            removedEntry.Gate.Dispose();
+        }
+    }
+
+    private static string CreateClientCacheKey(KubeConfigLoadResult loadResult, string contextName)
+    {
+        var sourceSignature = loadResult.SourcePaths.Count is 0
+            ? "no-kubeconfig"
+            : string.Join(
+                "|",
+                loadResult.SourcePaths.Select(static path =>
+                {
+                    path.Refresh();
+                    return $"{path.FullName}:{path.Length}:{path.LastWriteTimeUtc.Ticks}";
+                }));
+
+        return $"{contextName}|{sourceSignature}";
+    }
+
     private static async Task<IReadOnlyList<KubeResourceSummary>> QueryCustomResourcesAsync(
         Kubernetes client,
         string contextName,
@@ -349,6 +411,15 @@ public sealed class KubeResourceQueryService
         public DateTimeOffset ExpiresAtUtc { get; set; } = DateTimeOffset.MinValue;
 
         public IReadOnlyList<KubeResourceSummary>? Resources { get; set; }
+    }
+
+    private sealed class CachedKubernetesClient
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+
+        public Kubernetes? Client { get; set; }
+
+        public DateTimeOffset LastAccessedUtc { get; set; } = DateTimeOffset.UtcNow;
     }
 
     private static async Task<IReadOnlyList<KubeResourceSummary>> QueryNodesAsync(
@@ -535,5 +606,19 @@ public sealed class KubeResourceQueryService
                 cancellationToken: cancellationToken);
 
         return list.Items.Select(item => KubeResourceSummaryFactory.Create(contextName, item)).ToArray();
+    }
+
+    public void Dispose()
+    {
+        foreach (var entry in clientCache.Values)
+        {
+            entry.Client?.Dispose();
+            entry.Gate.Dispose();
+        }
+
+        foreach (var entry in namespaceQueryCache.Values)
+        {
+            entry.Gate.Dispose();
+        }
     }
 }
