@@ -79,6 +79,7 @@ public sealed class AgentDiagnosticsResponseFactoryTests
         Assert.False(response.TrustBoundary.SecretRevealEnabled);
         Assert.Contains("loopback", response.TrustBoundary.BindingSummary, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("stay on this machine", response.TrustBoundary.ClusterAuthoritySummary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("stay local", response.TrustBoundary.RuntimeDataSummary, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

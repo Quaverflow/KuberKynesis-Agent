@@ -75,12 +75,12 @@ public sealed class AgentDiagnosticsResponseFactory
             PublishedShareEnabled: false,
             SecretRevealEnabled: false,
             BindingSummary: loopbackOnlyBinding
-                ? "The local agent binds to loopback by default, so the browser talks to a machine-local control point instead of a network-reachable backend."
-                : $"The configured agent URL '{options.PublicUrl}' is not loopback-only. That weakens the default local-only trust boundary and should be treated as an explicit operator override.",
-            ClusterAuthoritySummary: "Kubeconfig files, cluster credentials, and cluster authority stay on this machine. Shared views recreate perspective only and never recreate authority.",
-            RuntimeDataSummary: "Diagnostics, live logs, Live Surface streams, action execution, and interactive exec shells stay local to the paired browser and local agent. They do not flow through remote sync or published sharing in this milestone.",
-            SharingSummary: "Portable setup export stays descriptive only. Published share links and remote sync remain disabled in the current local-only milestone.",
-            SecretHandlingSummary: "The UI does not reveal secret values. Secret-like text is redacted before browser persistence or export, and interactive exec remains an explicit opt-in shell transport rather than a secret reveal shortcut.");
+                ? "The agent stays on loopback."
+                : $"The configured agent URL '{options.PublicUrl}' is not loopback-only. Treat that as an explicit override.",
+            ClusterAuthoritySummary: "Kubeconfig and cluster credentials stay on this machine.",
+            RuntimeDataSummary: "Logs, diagnostics, exec, and action runtime stay local.",
+            SharingSummary: "Sharing stays descriptive and never carries cluster authority.",
+            SecretHandlingSummary: "Secret values stay redacted in the UI and exports.");
     }
 
     private static bool IsLoopbackUrl(string? url)
