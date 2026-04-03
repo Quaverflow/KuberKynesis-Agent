@@ -2,6 +2,7 @@ using k8s;
 using Kuberkynesis.Agent.Core.Configuration;
 using Kuberkynesis.Ui.Shared.Kubernetes;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -51,23 +52,38 @@ public sealed class KubeResourceQueryService : IDisposable
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        var totalStopwatch = Stopwatch.StartNew();
+        var loadStopwatch = Stopwatch.StartNew();
         var loadResult = kubeConfigLoader.Load();
+        loadStopwatch.Stop();
         var normalizedLimit = NormalizeLimit(request.Limit);
         var warnings = loadResult.Warnings.Select(warning => new KubeQueryWarning(null, warning)).ToList();
+        var contextTimings = new ConcurrentBag<KubeResourceContextQueryTiming>();
 
         if (loadResult.Contexts.Count is 0)
         {
+            totalStopwatch.Stop();
             return new KubeResourceQueryResponse(
                 request.Kind,
                 Contexts: [],
                 LimitApplied: normalizedLimit,
                 Resources: [],
                 Warnings: warnings,
-                TransparencyCommands: []);
+                TransparencyCommands: [])
+            {
+                Performance = new KubeResourceQueryPerformance(
+                    TotalMilliseconds: ToMilliseconds(totalStopwatch.Elapsed),
+                    KubeConfigLoadMilliseconds: ToMilliseconds(loadStopwatch.Elapsed),
+                    ContextResolutionMilliseconds: 0,
+                    OrderingMilliseconds: 0,
+                    Contexts: [])
+            };
         }
 
+        var contextResolutionStopwatch = Stopwatch.StartNew();
         var targetContexts = ResolveTargetContexts(request.Contexts, loadResult).ToArray();
         var targetKinds = ResolveTargetKinds(request).ToArray();
+        contextResolutionStopwatch.Stop();
         var resources = new ConcurrentBag<KubeResourceSummary>();
         var contextWarnings = new ConcurrentQueue<KubeQueryWarning>();
 
@@ -80,18 +96,38 @@ public sealed class KubeResourceQueryService : IDisposable
             },
             async (context, probeCancellationToken) =>
             {
+                var clientAcquireMilliseconds = 0;
+                var queryMilliseconds = 0;
+                var filterMilliseconds = 0;
+                var returnedResourceCount = 0;
+                var matchedResourceCount = 0;
+
                 if (context.Status is not KubeContextStatus.Configured)
                 {
-                    contextWarnings.Enqueue(new KubeQueryWarning(context.Name, context.StatusMessage ?? "The kube context is not currently queryable."));
+                    var error = context.StatusMessage ?? "The kube context is not currently queryable.";
+                    contextWarnings.Enqueue(new KubeQueryWarning(context.Name, error));
+                    contextTimings.Add(new KubeResourceContextQueryTiming(
+                        ContextName: context.Name,
+                        ClientAcquireMilliseconds: clientAcquireMilliseconds,
+                        QueryMilliseconds: queryMilliseconds,
+                        FilterMilliseconds: filterMilliseconds,
+                        ReturnedResourceCount: returnedResourceCount,
+                        MatchedResourceCount: matchedResourceCount,
+                        Error: error));
                     return;
                 }
 
                 try
                 {
+                    var clientAcquireStopwatch = Stopwatch.StartNew();
                     var client = await GetOrCreateCachedClientAsync(loadResult, context.Name, probeCancellationToken);
+                    clientAcquireStopwatch.Stop();
+                    clientAcquireMilliseconds = ToMilliseconds(clientAcquireStopwatch.Elapsed);
                     using var contextQueryCancellation = CancellationTokenSource.CreateLinkedTokenSource(probeCancellationToken);
                     contextQueryCancellation.CancelAfter(contextQueryTimeout);
 
+                    var queryStopwatch = Stopwatch.StartNew();
+                    var contextResourceBuffer = new List<KubeResourceSummary>();
                     foreach (var kind in targetKinds)
                     {
                         var kindRequest = request with
@@ -106,27 +142,60 @@ public sealed class KubeResourceQueryService : IDisposable
                             kindRequest,
                             normalizedLimit,
                             contextQueryCancellation.Token);
-
-                        foreach (var resource in contextResources.Where(summary => KubeResourceSummaryFactory.MatchesSearch(summary, request.Search)))
-                        {
-                            resources.Add(resource);
-                        }
+                        returnedResourceCount += contextResources.Count;
+                        contextResourceBuffer.AddRange(contextResources);
                     }
+                    queryStopwatch.Stop();
+                    queryMilliseconds = ToMilliseconds(queryStopwatch.Elapsed);
+
+                    var filterStopwatch = Stopwatch.StartNew();
+                    foreach (var resource in contextResourceBuffer.Where(summary => KubeResourceSummaryFactory.MatchesSearch(summary, request.Search)))
+                    {
+                        resources.Add(resource);
+                        matchedResourceCount++;
+                    }
+                    filterStopwatch.Stop();
+                    filterMilliseconds = ToMilliseconds(filterStopwatch.Elapsed);
+
+                    contextTimings.Add(new KubeResourceContextQueryTiming(
+                        ContextName: context.Name,
+                        ClientAcquireMilliseconds: clientAcquireMilliseconds,
+                        QueryMilliseconds: queryMilliseconds,
+                        FilterMilliseconds: filterMilliseconds,
+                        ReturnedResourceCount: returnedResourceCount,
+                        MatchedResourceCount: matchedResourceCount));
                 }
                 catch (OperationCanceledException) when (!probeCancellationToken.IsCancellationRequested)
                 {
-                    contextWarnings.Enqueue(new KubeQueryWarning(
-                        context.Name,
-                        $"Timed out after {(int)contextQueryTimeout.TotalSeconds}s while querying {request.Kind}."));
+                    var error = $"Timed out after {(int)contextQueryTimeout.TotalSeconds}s while querying {request.Kind}.";
+                    contextWarnings.Enqueue(new KubeQueryWarning(context.Name, error));
+                    contextTimings.Add(new KubeResourceContextQueryTiming(
+                        ContextName: context.Name,
+                        ClientAcquireMilliseconds: clientAcquireMilliseconds,
+                        QueryMilliseconds: queryMilliseconds,
+                        FilterMilliseconds: filterMilliseconds,
+                        ReturnedResourceCount: returnedResourceCount,
+                        MatchedResourceCount: matchedResourceCount,
+                        TimedOut: true,
+                        Error: error));
                 }
                 catch (Exception exception)
                 {
                     contextWarnings.Enqueue(new KubeQueryWarning(context.Name, exception.Message));
+                    contextTimings.Add(new KubeResourceContextQueryTiming(
+                        ContextName: context.Name,
+                        ClientAcquireMilliseconds: clientAcquireMilliseconds,
+                        QueryMilliseconds: queryMilliseconds,
+                        FilterMilliseconds: filterMilliseconds,
+                        ReturnedResourceCount: returnedResourceCount,
+                        MatchedResourceCount: matchedResourceCount,
+                        Error: exception.Message));
                 }
             });
 
         warnings.AddRange(contextWarnings);
 
+        var orderingStopwatch = Stopwatch.StartNew();
         var orderedResources = resources
             .OrderBy(resource => resource.ContextName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(resource => resource.Namespace ?? string.Empty, StringComparer.OrdinalIgnoreCase)
@@ -134,6 +203,8 @@ public sealed class KubeResourceQueryService : IDisposable
             .ThenBy(resource => resource.Name, StringComparer.OrdinalIgnoreCase)
             .Take(normalizedLimit)
             .ToArray();
+        orderingStopwatch.Stop();
+        totalStopwatch.Stop();
 
         return new KubeResourceQueryResponse(
             request.Kind,
@@ -144,7 +215,22 @@ public sealed class KubeResourceQueryService : IDisposable
             TransparencyCommands: KubectlTransparencyFactory.CreateForQuery(
                 request,
                 targetContexts.Select(context => context.Name).ToArray(),
-                normalizedLimit));
+                normalizedLimit))
+        {
+            Performance = new KubeResourceQueryPerformance(
+                TotalMilliseconds: ToMilliseconds(totalStopwatch.Elapsed),
+                KubeConfigLoadMilliseconds: ToMilliseconds(loadStopwatch.Elapsed),
+                ContextResolutionMilliseconds: ToMilliseconds(contextResolutionStopwatch.Elapsed),
+                OrderingMilliseconds: ToMilliseconds(orderingStopwatch.Elapsed),
+                Contexts: contextTimings
+                    .OrderBy(static timing => timing.ContextName, StringComparer.OrdinalIgnoreCase)
+                    .ToArray())
+        };
+    }
+
+    private static int ToMilliseconds(TimeSpan elapsed)
+    {
+        return (int)Math.Round(elapsed.TotalMilliseconds, MidpointRounding.AwayFromZero);
     }
 
     internal static IReadOnlyList<DiscoveredKubeContext> ResolveTargetContexts(

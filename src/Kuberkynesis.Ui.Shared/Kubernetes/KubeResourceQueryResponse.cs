@@ -6,4 +6,7 @@ public sealed record KubeResourceQueryResponse(
     int LimitApplied,
     IReadOnlyList<KubeResourceSummary> Resources,
     IReadOnlyList<KubeQueryWarning> Warnings,
-    IReadOnlyList<KubectlCommandPreview>? TransparencyCommands = null);
+    IReadOnlyList<KubectlCommandPreview>? TransparencyCommands = null)
+{
+    public KubeResourceQueryPerformance? Performance { get; init; }
+}

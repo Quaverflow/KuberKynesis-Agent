@@ -1,8 +1,8 @@
 {
   "sourceRepository": "Quaverflow/KuberKynesis",
   "sourceBranch": "master",
-  "sourceCommit": "2be43181249e03019815e3aeb7d471660fcbbf53",
-  "exportedAtUtc": "2026-04-03T20:16:41.0961777+00:00",
+  "sourceCommit": "1377ce635252cdd68899e1fd11fc8dbd9ec4dd1b",
+  "exportedAtUtc": "2026-04-03T21:05:58.2812807+00:00",
   "publicRepository": "quaverflow/kuberkynesis-agent",
   "includedProjects": [
     "tools/Kuberkynesis.Agent.BrowserBridge",

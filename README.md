@@ -39,5 +39,5 @@ For local hosted-UI bridge testing, load the unpacked extension under `tools/Kub
 ## Sync metadata
 
 - Source repository: Quaverflow/KuberKynesis
-- Source commit: 2be43181249e03019815e3aeb7d471660fcbbf53
+- Source commit: 1377ce635252cdd68899e1fd11fc8dbd9ec4dd1b
 - Full sync manifest: `SYNC-METADATA.json`

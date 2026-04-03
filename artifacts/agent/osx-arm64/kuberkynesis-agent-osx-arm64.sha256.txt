@@ -1,1 +1,1 @@
-7677b9c526c33ec26da8e4c14159d2793c774a94d03aa85883ae0afd599fabc7  kuberkynesis-agent-osx-arm64.zip
+cd4159001988adf99a9aab6f4cf90603d6f2dcff46e9a524ab04dbe7f7ac7cbf  kuberkynesis-agent-osx-arm64.zip
